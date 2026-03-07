@@ -1,39 +1,41 @@
 
-Goal: Unblock publishing and get the login build live (the public URL is still serving the old blank-app version).
+Goal: get your live URL off the blank app immediately, since Update is not producing a live change.
 
-What I confirmed:
-- Preview URL is loading the current app (not blank).
-- Published URL is still the old “Welcome to your blank app”.
-- You reported: desktop, inside editor, and “Update” is disabled.
+What I verified
+- Preview is running your real app (you’re on `/admin/dashboard` in preview).
+- Published URL `https://cast-care-vault.lovable.app` still serves “Welcome to Your Blank App”.
+- You confirmed: clicking Update gives no visible result, and you have owner permissions.
 
-Plan:
-1) Reset publish state in the editor UI
-- Hard refresh the editor tab (Cmd/Ctrl + Shift + R).
-- Stay in the same project, open Chat/Preview workspace (not Cloud panel only).
-- Open Publish again and check if “Update” becomes enabled.
+Diagnosis
+- This is a publish pipeline/state issue (not an app code issue). Your test environment is correct, but live is not receiving the new frontend artifact.
 
-2) Ensure you are publishing from the correct project/version
-- Verify project name matches the app you expect.
-- Open History and confirm the login-page change exists in the current head version.
-- If needed, restore/select the latest version containing login and then reopen Publish.
+Plan (fastest recovery-first)
+1) Force a fresh publish artifact from a new head state
+- Open History.
+- Restore the latest version that contains your login/admin app (even if it already looks current).
+- In the editor, make one tiny visible UI edit (e.g., change version text from `v1.0` to `v1.0.1`).
+- Save, then click Publish → Update.
 
-3) Force a detectable frontend change (if Update remains disabled)
-- Make one tiny visible frontend change (example: add a small “Build v1” label on login page).
-- This guarantees a new frontend diff so Update should enable.
-- Then publish immediately.
+2) Verify live deploy with a cold browser context
+- Open `https://cast-care-vault.lovable.app` in an Incognito/Private window.
+- Hard refresh once.
+- Confirm blank app is gone and your login/redirect flow appears.
 
-4) Verify live deployment end-to-end
-- Test both:
-  - https://cast-care-vault.lovable.app
-  - https://cast-care-vault.lovable.app/login
-- Confirm root redirects to /login and login UI renders.
-- Test once on desktop and once on tablet (fresh tab / hard refresh).
+3) If still blank after step 1–2, use immediate workaround to go live
+- Create a Remix (project copy) of this project.
+- Publish the Remix and test its new `.lovable.app` URL.
+- This bypasses the stuck publish state of the current project.
 
-5) If still blocked after step 3
-- Capture screenshot of the publish dialog showing disabled Update and any tooltip text.
-- Then I’ll give a targeted next-step plan based on that exact state (permission/state/branch mismatch).
+4) If Remix publishes correctly, finalize domain strategy
+- Continue temporarily on the Remix URL, or
+- move your final domain target once stable (so users stop seeing the blank app).
 
-Technical details:
-- Current evidence shows a frontend deployment mismatch: preview has newer code, published domain serves older bundle.
-- Backend changes auto-deploy, but frontend requires an explicit successful publish/update action.
-- A forced tiny UI diff is the safest way to trigger a new publish artifact when the button is stuck disabled.
+5) If Remix also fails, collect exact failure evidence for platform escalation
+- Screenshot Publish dialog before and after clicking Update.
+- Include timestamp and your timezone.
+- Include current project URL and published URL.
+- This gives support enough to inspect publish job logs directly.
+
+Technical notes
+- Frontend requires a successful publish artifact; backend updates don’t affect this symptom.
+- “No visible result” after Update with persistent blank live page strongly indicates publish state not committing, not a route/auth bug in your React app.
