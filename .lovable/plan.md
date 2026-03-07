@@ -1,41 +1,42 @@
 
-Goal: get your live URL off the blank app immediately, since Update is not producing a live change.
+Goal: recover your missing app state in Test first, then get Live showing the same app.
 
-What I verified
-- Preview is running your real app (you’re on `/admin/dashboard` in preview).
-- Published URL `https://cast-care-vault.lovable.app` still serves “Welcome to Your Blank App”.
-- You confirmed: clicking Update gives no visible result, and you have owner permissions.
+What I found (from codebase now)
+- Current project files are actually at the starter state:
+  - `src/pages/Index.tsx` = “Welcome to Your Blank App”
+  - `src/pages` only has `Index.tsx` and `NotFound.tsx`
+  - No login/admin/dashboard code exists in current head
+- So this is not just a preview glitch: the current checked-out version is a blank snapshot.
 
-Diagnosis
-- This is a publish pipeline/state issue (not an app code issue). Your test environment is correct, but live is not receiving the new frontend artifact.
+Recovery plan (prioritizing “recover old state”)
+1) Restore the correct working snapshot from History
+- Desktop: top nav clock icon (or + → History) → open snapshots.
+- Mobile: Preview mode → clock icon bottom-left (or … → History).
+- Pick the latest snapshot that visually shows your login/admin app.
+- Click Restore.
 
-Plan (fastest recovery-first)
-1) Force a fresh publish artifact from a new head state
-- Open History.
-- Restore the latest version that contains your login/admin app (even if it already looks current).
-- In the editor, make one tiny visible UI edit (e.g., change version text from `v1.0` to `v1.0.1`).
-- Save, then click Publish → Update.
+2) Immediately verify recovered state in preview before publishing
+- In preview, check:
+  - `/` route behavior
+  - `/login` route loads
+  - admin/dashboard route loads
+- If any route fails, move one snapshot earlier/later in History and re-check.
 
-2) Verify live deploy with a cold browser context
-- Open `https://cast-care-vault.lovable.app` in an Incognito/Private window.
-- Hard refresh once.
-- Confirm blank app is gone and your login/redirect flow appears.
+3) Create a “recovery checkpoint” change
+- Make one tiny visible edit (version text like `v1.0.2`) in the recovered app.
+- This creates a fresh artifact and avoids reusing stale publish state.
 
-3) If still blank after step 1–2, use immediate workaround to go live
-- Create a Remix (project copy) of this project.
-- Publish the Remix and test its new `.lovable.app` URL.
-- This bypasses the stuck publish state of the current project.
+4) Publish recovered snapshot
+- Click Publish → Update.
+- Verify in private/incognito at:
+  - `https://cast-care-vault.lovable.app`
+  - `https://cast-care-vault.lovable.app/login`
 
-4) If Remix publishes correctly, finalize domain strategy
-- Continue temporarily on the Remix URL, or
-- move your final domain target once stable (so users stop seeing the blank app).
-
-5) If Remix also fails, collect exact failure evidence for platform escalation
-- Screenshot Publish dialog before and after clicking Update.
-- Include timestamp and your timezone.
-- Include current project URL and published URL.
-- This gives support enough to inspect publish job logs directly.
+5) If Live is still blank after successful recovery in preview
+- Create a Remix from this recovered project state and publish the Remix URL.
+- This bypasses the stuck deployment state while preserving your recovered code.
 
 Technical notes
-- Frontend requires a successful publish artifact; backend updates don’t affect this symptom.
-- “No visible result” after Update with persistent blank live page strongly indicates publish state not committing, not a route/auth bug in your React app.
+- Right now, your active Test head is blank code, which is why preview shows blank.
+- Your old app is likely still in History (you confirmed it exists), so restore is the correct recovery path.
+- `/login` returning 404 on Live is expected when Live is serving the blank starter app (no login route deployed).
