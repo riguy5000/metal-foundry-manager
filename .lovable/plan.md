@@ -1,41 +1,72 @@
 
-Goal: get your live URL off the blank app immediately, since Update is not producing a live change.
 
-What I verified
-- Preview is running your real app (you’re on `/admin/dashboard` in preview).
-- Published URL `https://cast-care-vault.lovable.app` still serves “Welcome to Your Blank App”.
-- You confirmed: clicking Update gives no visible result, and you have owner permissions.
+## What Happened and Recovery Plan
 
-Diagnosis
-- This is a publish pipeline/state issue (not an app code issue). Your test environment is correct, but live is not receiving the new frontend artifact.
+### What happened
 
-Plan (fastest recovery-first)
-1) Force a fresh publish artifact from a new head state
-- Open History.
-- Restore the latest version that contains your login/admin app (even if it already looks current).
-- In the editor, make one tiny visible UI edit (e.g., change version text from `v1.0` to `v1.0.1`).
-- Save, then click Publish → Update.
+1. Your Metal CRM (cast-care-vault) was working in Lovable's preview but the **published URL** was stuck showing a blank page.
+2. The plan file suggested creating a **Remix** to bypass the stuck publish state.
+3. The remix created a copy, but the copy started from the blank template — it did not carry over your CRM frontend code.
+4. Meanwhile, the GitHub repo only ever received **plan file updates and config changes** — the actual React components (pages, forms, dashboard, auth) were never committed to GitHub. Every commit in the repo history is either the initial template, plan updates, or config syncs.
+5. The "Revert" attempts then pushed the blank template state back, overwriting any remaining snapshot.
 
-2) Verify live deploy with a cold browser context
-- Open `https://cast-care-vault.lovable.app` in an Incognito/Private window.
-- Hard refresh once.
-- Confirm blank app is gone and your login/redirect flow appears.
+**Bottom line**: The CRM frontend code is lost from both Lovable's state and GitHub. However, your **entire backend database is intact** — all tables, data, RLS policies, and functions are untouched.
 
-3) If still blank after step 1–2, use immediate workaround to go live
-- Create a Remix (project copy) of this project.
-- Publish the Remix and test its new `.lovable.app` URL.
-- This bypasses the stuck publish state of the current project.
+### What is still intact
 
-4) If Remix publishes correctly, finalize domain strategy
-- Continue temporarily on the Remix URL, or
-- move your final domain target once stable (so users stop seeing the blank app).
+Your database has all of these tables with real data:
+- **metal_types** (19 rows) — all your metals with karat labels, stock levels, thresholds
+- **casting_records** (9 rows) — casting codes, extracted grams, discrepancy tracking
+- **inventory_transactions** — stock movements and adjustments
+- **audit_logs** — action history
+- **profiles** — user profiles
+- **user_roles** — admin/employee roles
+- **settings** — discrepancy tolerance, warning flags
+- **metal_threshold_overrides** — per-metal minimum thresholds
 
-5) If Remix also fails, collect exact failure evidence for platform escalation
-- Screenshot Publish dialog before and after clicking Update.
-- Include timestamp and your timezone.
-- Include current project URL and published URL.
-- This gives support enough to inspect publish job logs directly.
+Also, partial CRM code exists in the [casting-process-compass](/projects/283039ff-c6be-4cb1-9bad-99e44103bad0) project (casting form, image uploads, process history).
 
-Technical notes
-- Frontend requires a successful publish artifact; backend updates don’t affect this symptom.
-- “No visible result” after Update with persistent blank live page strongly indicates publish state not committing, not a route/auth bug in your React app.
+### Recovery Plan: Rebuild the Frontend
+
+Since the database schema and data are fully intact, I will rebuild the entire Metal CRM frontend to match the existing tables. Here is what I will build:
+
+**1. Authentication**
+- Login page with email/password
+- Auth guard for protected routes
+- Role-based access (admin vs employee) using existing `user_roles` table and `has_role()` function
+
+**2. Admin Dashboard**
+- Overview cards: total metal types, active castings, low-stock alerts
+- Recent casting records table
+- Quick-action buttons
+
+**3. Metal Inventory Management**
+- Table of all metal types with current stock, karat label, metal family, color group
+- Add/edit metal type form
+- Stock adjustment (add stock, manual adjustment) creating `inventory_transactions`
+- Low-stock warnings based on thresholds from `metal_threshold_overrides`
+
+**4. Casting Records**
+- List of all casting records with status badges (extracted_pending_completion, completed, flagged)
+- New casting form: select metal type, enter extracted grams, job reference
+- Completion form: enter returned button grams, finished jewelry grams, auto-calculate discrepancy
+- Discrepancy flagging with notes
+
+**5. Inventory Transaction Log**
+- Filterable history of all inventory movements
+- Links to related casting records
+
+**6. Audit Log Viewer**
+- Read-only table of all audit_logs entries
+
+**7. Settings Page (admin only)**
+- Default discrepancy tolerance
+- Warning toggles
+- Per-metal threshold overrides
+
+### Technical approach
+- All pages use the existing database tables and RLS policies — no database changes needed
+- Uses existing `supabase` client from `src/integrations/supabase/client.ts`
+- React Router for navigation, TanStack Query for data fetching
+- Tailwind + shadcn/ui components (already installed)
+
