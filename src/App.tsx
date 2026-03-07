@@ -14,7 +14,14 @@ import CastingRecords from "./pages/CastingRecords";
 import TransactionLog from "./pages/TransactionLog";
 import AuditLog from "./pages/AuditLog";
 import SettingsPage from "./pages/SettingsPage";
-import EmployeeDashboard from "./pages/EmployeeDashboard";
+import AdminWarnings from "./pages/AdminWarnings";
+import AdminStatistics from "./pages/AdminStatistics";
+import AdminUsers from "./pages/AdminUsers";
+import EmployeeHome from "./pages/employee/EmployeeHome";
+import EmployeeExtract from "./pages/employee/EmployeeExtract";
+import EmployeePending from "./pages/employee/EmployeePending";
+import EmployeeComplete from "./pages/employee/EmployeeComplete";
+import EmployeeRecent from "./pages/employee/EmployeeRecent";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,15 +46,24 @@ const App = () => (
 
             <Route path="/admin" element={<AuthGuard requiredRole="admin"><AdminLayout /></AuthGuard>}>
               <Route index element={<AdminDashboard />} />
-              <Route path="metals" element={<MetalInventory />} />
+              <Route path="inventory" element={<MetalInventory />} />
               <Route path="castings" element={<CastingRecords />} />
+              <Route path="warnings" element={<AdminWarnings />} />
               <Route path="transactions" element={<TransactionLog />} />
+              <Route path="statistics" element={<AdminStatistics />} />
+              <Route path="users" element={<AdminUsers />} />
               <Route path="audit" element={<AuditLog />} />
               <Route path="settings" element={<SettingsPage />} />
+              {/* Keep old route working */}
+              <Route path="metals" element={<Navigate to="/admin/inventory" replace />} />
             </Route>
 
             <Route path="/employee" element={<AuthGuard><EmployeeLayout /></AuthGuard>}>
-              <Route index element={<EmployeeDashboard />} />
+              <Route index element={<EmployeeHome />} />
+              <Route path="extract/:metalId" element={<EmployeeExtract />} />
+              <Route path="pending" element={<EmployeePending />} />
+              <Route path="complete/:castingId" element={<EmployeeComplete />} />
+              <Route path="recent" element={<EmployeeRecent />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
