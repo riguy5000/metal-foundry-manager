@@ -47,12 +47,12 @@ export default function EmployeeComplete() {
   const returned = parseFloat(returnedGrams) || 0;
   const jewelry = parseFloat(jewelryGrams) || 0;
   const extracted = casting ? Number(casting.extracted_grams) : 0;
-  const totalAccounted = returned + jewelry;
-  const difference = extracted - totalAccounted;
 
   const completeMutation = useMutation({
     mutationFn: async () => {
       if (!casting || !user) throw new Error('Missing data');
+      const totalAccounted = returned + jewelry;
+      const difference = extracted - totalAccounted;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
       const discrepancyPercent = extracted > 0 ? (difference / extracted) * 100 : 0;
       const flag = Math.abs(discrepancyPercent) > Number(tolerance);
@@ -71,7 +71,6 @@ export default function EmployeeComplete() {
       }).eq('id', casting.id);
       if (error) throw error;
 
-      // Return button weight to stock
       if (returned > 0) {
         const mt = casting.metal_types as any;
         await supabase.from('metal_types').update({
@@ -96,35 +95,27 @@ export default function EmployeeComplete() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Success screen — neutral, no discrepancy info for employees
+  // Neutral success — no discrepancy info shown
   if (success) {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center min-h-[60vh]">
         <div className="rounded-full bg-success/10 p-4 mb-4">
           <CheckCircle2 className="h-12 w-12 text-success" />
         </div>
-        <h2 className="text-xl font-bold mb-1">Casting Complete</h2>
+        <h2 className="text-xl font-bold mb-1">Casting Record Saved</h2>
         <p className="text-muted-foreground mb-6">
-          {casting?.casting_code} has been recorded successfully
+          {casting?.casting_code} — record saved successfully
         </p>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => navigate('/employee')}>
-            Back to Metals
-          </Button>
-          <Button onClick={() => navigate('/employee/pending')}>
-            View Pending
-          </Button>
+          <Button variant="outline" onClick={() => navigate('/employee')}>Back to Metals</Button>
+          <Button onClick={() => navigate('/employee/pending')}>View Pending</Button>
         </div>
       </div>
     );
   }
 
   if (!casting) {
-    return (
-      <div className="p-4">
-        <div className="h-48 bg-muted rounded-lg animate-pulse" />
-      </div>
-    );
+    return <div className="p-4"><div className="h-48 bg-muted rounded-lg animate-pulse" /></div>;
   }
 
   const mt = casting.metal_types as any;
@@ -153,71 +144,40 @@ export default function EmployeeComplete() {
         </div>
       </div>
 
-      {/* Completion form */}
+      {/* Simple form — no reconciliation preview, no discrepancy info */}
       <div className="space-y-5">
         <div className="space-y-2">
           <Label className="text-sm font-medium">Finished Jewelry Weight (g)</Label>
           <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={jewelryGrams}
-            onChange={(e) => setJewelryGrams(e.target.value)}
-            placeholder="0.00"
-            className="h-14 text-2xl font-mono text-center"
-            inputMode="decimal"
+            type="number" step="0.01" min="0"
+            value={jewelryGrams} onChange={(e) => setJewelryGrams(e.target.value)}
+            placeholder="0.00" className="h-14 text-2xl font-mono text-center" inputMode="decimal"
           />
         </div>
 
         <div className="space-y-2">
           <Label className="text-sm font-medium">Returned Sprue/Button Weight (g)</Label>
           <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={returnedGrams}
-            onChange={(e) => setReturnedGrams(e.target.value)}
-            placeholder="0.00"
-            className="h-14 text-2xl font-mono text-center"
-            inputMode="decimal"
+            type="number" step="0.01" min="0"
+            value={returnedGrams} onChange={(e) => setReturnedGrams(e.target.value)}
+            placeholder="0.00" className="h-14 text-2xl font-mono text-center" inputMode="decimal"
           />
         </div>
-
-        {/* Live reconciliation — neutral for employee (no red/green discrepancy) */}
-        {(returned > 0 || jewelry > 0) && (
-          <div className="rounded-xl bg-muted p-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Extracted</span>
-              <span className="font-mono font-semibold">{extracted.toFixed(2)}g</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Jewelry + Returned</span>
-              <span className="font-mono font-semibold">{totalAccounted.toFixed(2)}g</span>
-            </div>
-            <div className="border-t border-border pt-2 flex justify-between text-sm">
-              <span className="text-muted-foreground">Difference</span>
-              <span className="font-mono font-semibold">{difference.toFixed(2)}g</span>
-            </div>
-          </div>
-        )}
 
         <div className="space-y-2">
           <Label className="text-sm font-medium">Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
           <Textarea
-            value={abnormalityNote}
-            onChange={(e) => setAbnormalityNote(e.target.value)}
-            placeholder="Any abnormalities or observations"
-            className="min-h-[80px]"
+            value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)}
+            placeholder="Any observations" className="min-h-[80px]"
           />
         </div>
 
         <Button
           onClick={() => completeMutation.mutate()}
           disabled={completeMutation.isPending || (returned <= 0 && jewelry <= 0)}
-          className="w-full h-14 text-base font-semibold"
-          size="lg"
+          className="w-full h-14 text-base font-semibold" size="lg"
         >
-          {completeMutation.isPending ? 'Completing...' : 'Complete Casting'}
+          {completeMutation.isPending ? 'Saving...' : 'Save Casting Record'}
         </Button>
       </div>
     </div>
