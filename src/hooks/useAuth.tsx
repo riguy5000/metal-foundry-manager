@@ -26,9 +26,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase
       .from('user_roles')
       .select('role')
-      .eq('user_id', userId)
-      .maybeSingle();
-    setRole(data?.role ?? 'employee');
+      .eq('user_id', userId);
+    // Prioritize admin role if user has multiple roles
+    const roles = data?.map(r => r.role) ?? [];
+    setRole(roles.includes('admin') ? 'admin' : (roles[0] ?? 'employee'));
   }, []);
 
   useEffect(() => {
