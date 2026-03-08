@@ -35,8 +35,8 @@ export default function EmployeeExtract() {
 
   const extractGrams = parseFloat(grams) || 0;
   const available = metal ? Number(metal.current_stock_grams) : 0;
-  const remaining = available - extractGrams;
-  const insufficientStock = extractGrams > available;
+  const remaining = Math.round((available - extractGrams) * 100) / 100;
+  const insufficientStock = remaining < 0;
 
   const extractMutation = useMutation({
     mutationFn: async () => {
