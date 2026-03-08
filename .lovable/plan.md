@@ -1,29 +1,41 @@
 
+Goal: get your live URL off the blank app immediately, since Update is not producing a live change.
 
-## Plan: Group Inventory Table by Karat Grade
+What I verified
+- Preview is running your real app (you’re on `/admin/dashboard` in preview).
+- Published URL `https://cast-care-vault.lovable.app` still serves “Welcome to Your Blank App”.
+- You confirmed: clicking Update gives no visible result, and you have owner permissions.
 
-### What changes
+Diagnosis
+- This is a publish pipeline/state issue (not an app code issue). Your test environment is correct, but live is not receiving the new frontend artifact.
 
-Reorganize the inventory table on `/admin/inventory` so metals are grouped under section headers by karat/grade: **10K**, **14K**, **18K**, **19K**, **20K**, **22K**, **24K**, **Platinum**, **Palladium**, **Silver**.
+Plan (fastest recovery-first)
+1) Force a fresh publish artifact from a new head state
+- Open History.
+- Restore the latest version that contains your login/admin app (even if it already looks current).
+- In the editor, make one tiny visible UI edit (e.g., change version text from `v1.0` to `v1.0.1`).
+- Save, then click Publish → Update.
 
-### How
+2) Verify live deploy with a cold browser context
+- Open `https://cast-care-vault.lovable.app` in an Incognito/Private window.
+- Hard refresh once.
+- Confirm blank app is gone and your login/redirect flow appears.
 
-In `src/pages/MetalInventory.tsx`, after fetching `metals`, group them by `karat_label` (falling back to `metal_family` for non-gold metals like Platinum, Palladium, Silver):
+3) If still blank after step 1–2, use immediate workaround to go live
+- Create a Remix (project copy) of this project.
+- Publish the Remix and test its new `.lovable.app` URL.
+- This bypasses the stuck publish state of the current project.
 
-1. **Group logic** — Create a helper that buckets metals into ordered groups:
-   - `10K`, `14K`, `18K`, `19K`, `20K`, `22K`, `24K` (from `karat_label`)
-   - `Platinum`, `Palladium`, `Silver` (from `metal_family` when `karat_label` is empty)
+4) If Remix publishes correctly, finalize domain strategy
+- Continue temporarily on the Remix URL, or
+- move your final domain target once stable (so users stop seeing the blank app).
 
-2. **Render grouped sections** — Instead of a single flat table, render one section per group with:
-   - A sticky/bold section header row spanning all columns (e.g. "10 Karat", "14 Karat", "Platinum")
-   - The metal rows underneath, same columns as today
+5) If Remix also fails, collect exact failure evidence for platform escalation
+- Screenshot Publish dialog before and after clicking Update.
+- Include timestamp and your timezone.
+- Include current project URL and published URL.
+- This gives support enough to inspect publish job logs directly.
 
-3. **Keep all existing functionality** — Add Stock, Adjust, Threshold, Clock buttons remain unchanged per row.
-
-### Technical detail
-
-- Group key: `metal.karat_label || metal.metal_family`
-- Sort order: numeric karat ascending, then non-gold families in current display_order
-- Section header rendered as a `<TableRow>` with a single `<TableCell colSpan={6}>` containing the group name styled as a subheading
-- Inactive metals (like 14K Russian Red) still shown but with their existing "Inactive" badge
-
+Technical notes
+- Frontend requires a successful publish artifact; backend updates don’t affect this symptom.
+- “No visible result” after Update with persistent blank live page strongly indicates publish state not committing, not a route/auth bug in your React app.
