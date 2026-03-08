@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +20,6 @@ export default function EmployeeComplete() {
   const [returnedGrams, setReturnedGrams] = useState('');
   const [jewelryGrams, setJewelryGrams] = useState('');
   const [abnormalityNote, setAbnormalityNote] = useState('');
-  const [success, setSuccess] = useState(false);
 
   const { data: casting } = useQuery({
     queryKey: ['casting_record', castingId],
@@ -90,29 +89,12 @@ export default function EmployeeComplete() {
       queryClient.invalidateQueries({ queryKey: ['metal_types'] });
       queryClient.invalidateQueries({ queryKey: ['my_pending'] });
       queryClient.invalidateQueries({ queryKey: ['my_castings'] });
-      setSuccess(true);
+      toast.success('Casting record saved');
+      setTimeout(() => navigate('/employee/pending'), 1800);
     },
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Neutral success — no discrepancy info shown
-  if (success) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center min-h-[60vh]">
-        <div className="rounded-full bg-success/10 p-4 mb-4">
-          <CheckCircle2 className="h-12 w-12 text-success" />
-        </div>
-        <h2 className="text-xl font-bold mb-1">Casting Record Saved</h2>
-        <p className="text-muted-foreground mb-6">
-          {casting?.casting_code} — record saved successfully
-        </p>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={() => navigate('/employee')}>Back to Metals</Button>
-          <Button onClick={() => navigate('/employee/pending')}>View Pending</Button>
-        </div>
-      </div>
-    );
-  }
 
   if (!casting) {
     return <div className="p-4"><div className="h-48 bg-muted rounded-lg animate-pulse" /></div>;
