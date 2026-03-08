@@ -145,25 +145,27 @@ export default function EmployeeExtract() {
       {/* Form — no flask code input, auto-generated on save */}
       <div className="space-y-5">
         <div className="space-y-2">
-          <div className="flex gap-2">
-            <Label className="text-sm font-medium flex-1">Grams to Extract</Label>
+          <Label className="text-sm font-medium">Grams to Extract</Label>
+          <div className="flex gap-3">
+            <Input
+              type="number" step="0.01" min="0.01"
+              value={grams} onChange={(e) => setGrams(e.target.value)}
+              placeholder="0.00"
+              className="h-14 text-2xl font-mono text-center flex-1 min-w-0"
+              inputMode="decimal"
+            />
             {available > 0 && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => setGrams(available.toString())}
-                className="text-xs font-medium text-primary hover:underline"
+                className="h-14 flex-1 min-w-0 flex flex-col items-center justify-center gap-0 px-3"
               >
-                Take All ({available.toFixed(2)}g)
-              </button>
+                <span className="text-xs font-medium text-muted-foreground leading-tight">Take All</span>
+                <span className="font-mono text-base font-bold leading-tight">{available.toFixed(2)}g</span>
+              </Button>
             )}
           </div>
-          <Input
-            type="number" step="0.01" min="0.01"
-            value={grams} onChange={(e) => setGrams(e.target.value)}
-            placeholder="0.00"
-            className="h-14 text-2xl font-mono text-center"
-            inputMode="decimal"
-          />
           {extractGrams > 0 && (
             <div className={cn(
               'flex items-center justify-between rounded-lg px-3 py-2 text-sm',
