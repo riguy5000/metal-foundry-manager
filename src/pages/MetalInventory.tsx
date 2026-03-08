@@ -93,6 +93,35 @@ export default function MetalInventory() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const karatOrder = ['10K', '14K', '18K', '19K', '20K', '22K', '24K'];
+  const familyOrder = ['Platinum', 'Palladium', 'Silver'];
+
+  const grouped = (() => {
+    if (!metals) return [];
+    const groups: Record<string, typeof metals> = {};
+    for (const m of metals) {
+      const key = m.karat_label || m.metal_family;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(m);
+    }
+    const allKeys = Object.keys(groups);
+    allKeys.sort((a, b) => {
+      const ai = karatOrder.indexOf(a);
+      const bi = karatOrder.indexOf(b);
+      if (ai !== -1 && bi !== -1) return ai - bi;
+      if (ai !== -1) return -1;
+      if (bi !== -1) return 1;
+      const afi = familyOrder.indexOf(a);
+      const bfi = familyOrder.indexOf(b);
+      if (afi !== -1 && bfi !== -1) return afi - bfi;
+      return a.localeCompare(b);
+    });
+    return allKeys.map((key) => ({
+      label: karatOrder.includes(key) ? `${key.replace('K', '')} Karat` : key,
+      metals: groups[key],
+    }));
+  })();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -122,64 +151,72 @@ export default function MetalInventory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {metals?.map((m) => {
-                const lowStock = m.low_stock_warning_enabled && m.current_stock_grams < m.minimum_threshold_grams;
-                const dotClass = getMetalDotClass(m.color_group, m.metal_family);
-                return (
-                  <TableRow key={m.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className={cn('h-2.5 w-2.5 rounded-full', dotClass)} />
-                        <span className="font-medium">{m.metal_name}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{m.metal_family}</TableCell>
-                    <TableCell className={cn('text-right font-mono font-bold', lowStock ? 'text-destructive' : '')}>
-                      {Number(m.current_stock_grams).toFixed(2)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-muted-foreground">{Number(m.minimum_threshold_grams).toFixed(0)}</TableCell>
-                    <TableCell>
-                      {!m.active_status ? (
-                        <Badge variant="secondary" className="text-[10px]">Inactive</Badge>
-                      ) : lowStock ? (
-                        <Badge variant="destructive" className="text-[10px]">⚠ Low</Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-[10px]">OK</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="outline" size="sm" className="h-7 text-xs"
-                          onClick={() => { setSelectedMetal(m); setAddStockOpen(true); }}
-                        >
-                          + Add
-                        </Button>
-                        <Button
-                          variant="outline" size="sm" className="h-7 text-xs"
-                          onClick={() => { setSelectedMetal(m); setAdjustOpen(true); }}
-                        >
-                          <Edit className="h-3 w-3 mr-1" />Adjust
-                        </Button>
-                        <Button
-                          variant="ghost" size="sm" className="h-7 text-xs"
-                          onClick={() => { setSelectedMetal(m); setThresholdOpen(true); }}
-                        >
-                          Threshold
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      </div>
+              {grouped.map((group) => (
+                <>
+                  <TableRow key={`group-${group.label}`} className="bg-muted/30 hover:bg-muted/30">
+                    <TableCell colSpan={6} className="py-2 px-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</span>
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                  {group.metals.map((m) => {
+                    const lowStock = m.low_stock_warning_enabled && m.current_stock_grams < m.minimum_threshold_grams;
+                    const dotClass = getMetalDotClass(m.color_group, m.metal_family);
+                    return (
+                      <TableRow key={m.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className={cn('h-2.5 w-2.5 rounded-full', dotClass)} />
+                            <span className="font-medium">{m.metal_name}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{m.metal_family}</TableCell>
+                        <TableCell className={cn('text-right font-mono font-bold', lowStock ? 'text-destructive' : '')}>
+                          {Number(m.current_stock_grams).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">{Number(m.minimum_threshold_grams).toFixed(0)}</TableCell>
+                        <TableCell>
+                          {!m.active_status ? (
+                            <Badge variant="secondary" className="text-[10px]">Inactive</Badge>
+                          ) : lowStock ? (
+                            <Badge variant="destructive" className="text-[10px]">⚠ Low</Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-[10px]">OK</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="outline" size="sm" className="h-7 text-xs"
+                              onClick={() => { setSelectedMetal(m); setAddStockOpen(true); }}
+                            >
+                              + Add
+                            </Button>
+                            <Button
+                              variant="outline" size="sm" className="h-7 text-xs"
+                              onClick={() => { setSelectedMetal(m); setAdjustOpen(true); }}
+                            >
+                              <Edit className="h-3 w-3 mr-1" />Adjust
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 text-xs"
+                              onClick={() => { setSelectedMetal(m); setThresholdOpen(true); }}
+                            >
+                              Threshold
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7">
+                              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </>
+              ))}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
-
       {/* Add Stock Dialog */}
       <Dialog open={addStockOpen} onOpenChange={setAddStockOpen}>
         <DialogContent>
