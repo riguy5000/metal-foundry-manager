@@ -15,6 +15,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Pencil } from 'lucide-react';
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -36,6 +37,7 @@ export default function CastingRecords() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
   const [selectedCasting, setSelectedCasting] = useState<any>(null);
 
   // Filter state
@@ -146,6 +148,64 @@ export default function CastingRecords() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const adjustCasting = useMutation({
+    mutationFn: async (values: any) => {
+      const casting = selectedCasting;
+      const returnedButton = values.returnedButtonGrams;
+      const finishedJewelry = values.finishedJewelryGrams;
+      const extracted = Number(casting.extracted_grams);
+      const totalAccounted = returnedButton + finishedJewelry;
+      const discrepancyGrams = extracted - totalAccounted;
+      const discrepancyPercent = (discrepancyGrams / extracted) * 100;
+      const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
+      const flag = Math.abs(discrepancyPercent) > tolerance;
+
+      // Calculate inventory delta: difference between new and old returned button
+      const oldReturned = Number(casting.returned_button_grams) || 0;
+      const returnedDelta = returnedButton - oldReturned;
+
+      const { error } = await supabase
+        .from('casting_records')
+        .update({
+          returned_button_grams: returnedButton,
+          finished_jewelry_grams: finishedJewelry,
+          discrepancy_grams: discrepancyGrams,
+          discrepancy_percent: discrepancyPercent,
+          tolerance_percent_used: tolerance,
+          discrepancy_flag: flag,
+          status: flag ? 'flagged' : 'completed',
+          abnormality_note: values.abnormalityNote || null,
+        })
+        .eq('id', casting.id);
+      if (error) throw error;
+
+      // Adjust inventory if returned button changed
+      if (returnedDelta !== 0) {
+        const metal = metals?.find((m) => m.id === casting.metal_type_id);
+        if (metal) {
+          await supabase.from('metal_types').update({
+            current_stock_grams: Number(metal.current_stock_grams) + returnedDelta,
+          }).eq('id', casting.metal_type_id);
+          await supabase.from('inventory_transactions').insert({
+            metal_type_id: casting.metal_type_id,
+            grams: Math.abs(returnedDelta),
+            transaction_type: 'manual_adjustment',
+            entered_by_user_id: user!.id,
+            notes: `Admin adjustment on casting ${casting.casting_code} (returned button ${returnedDelta > 0 ? '+' : ''}${returnedDelta.toFixed(2)}g)`,
+            related_casting_id: casting.id,
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['casting_records'] });
+      queryClient.invalidateQueries({ queryKey: ['metal_types'] });
+      setAdjustOpen(false);
+      toast.success('Casting record adjusted');
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Casting Records</h1>
@@ -214,11 +274,13 @@ export default function CastingRecords() {
                 <TableHead className="text-right">Disc. %</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Extracted By</TableHead>
+                <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredCastings.map((c) => {
                 const profile = c.profiles as any;
+                const isCompleted = c.status === 'completed' || c.status === 'flagged';
                 return (
                   <TableRow key={c.id} className={cn(c.status === 'extracted_pending_completion' && 'cursor-pointer hover:bg-muted/50')} onClick={() => {
                     if (c.status === 'extracted_pending_completion') {
@@ -250,12 +312,28 @@ export default function CastingRecords() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{profile?.full_name ?? '—'}</TableCell>
+                    <TableCell>
+                      {isCompleted && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedCasting(c);
+                            setAdjustOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })}
               {filteredCastings.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">No casting records</TableCell>
+                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">No casting records</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -263,6 +341,7 @@ export default function CastingRecords() {
         </CardContent>
       </Card>
 
+      {/* Complete pending casting dialog */}
       <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Complete Casting — {selectedCasting?.casting_code}</DialogTitle></DialogHeader>
@@ -271,6 +350,20 @@ export default function CastingRecords() {
               casting={selectedCasting}
               onSubmit={(v) => completeCasting.mutate(v)}
               loading={completeCasting.isPending}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust completed casting dialog */}
+      <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Adjust Casting — {selectedCasting?.casting_code}</DialogTitle></DialogHeader>
+          {selectedCasting && adjustOpen && (
+            <AdjustCastingForm
+              casting={selectedCasting}
+              onSubmit={(v) => adjustCasting.mutate(v)}
+              loading={adjustCasting.isPending}
             />
           )}
         </DialogContent>
@@ -317,6 +410,50 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
       </div>
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? 'Completing...' : 'Complete Casting'}
+      </Button>
+    </form>
+  );
+}
+
+function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSubmit: (v: any) => void; loading: boolean }) {
+  const [returnedButtonGrams, setReturnedButtonGrams] = useState(String(Number(casting.returned_button_grams ?? 0)));
+  const [finishedJewelryGrams, setFinishedJewelryGrams] = useState(String(Number(casting.finished_jewelry_grams ?? 0)));
+  const [abnormalityNote, setAbnormalityNote] = useState(casting.abnormality_note ?? '');
+
+  const returned = parseFloat(returnedButtonGrams) || 0;
+  const jewelry = parseFloat(finishedJewelryGrams) || 0;
+  const extracted = Number(casting.extracted_grams);
+  const discrepancy = extracted - (returned + jewelry);
+  const discrepancyPct = extracted > 0 ? (discrepancy / extracted) * 100 : 0;
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ returnedButtonGrams: returned, finishedJewelryGrams: jewelry, abnormalityNote }); }} className="space-y-4">
+      <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
+        <p>Extracted: <strong>{extracted.toFixed(2)}g</strong></p>
+        <p className="text-xs text-muted-foreground">
+          Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Returned Button (g)</Label>
+          <Input type="number" step="0.01" min="0" value={returnedButtonGrams} onChange={(e) => setReturnedButtonGrams(e.target.value)} required />
+        </div>
+        <div className="space-y-2">
+          <Label>Finished Jewelry (g)</Label>
+          <Input type="number" step="0.01" min="0" value={finishedJewelryGrams} onChange={(e) => setFinishedJewelryGrams(e.target.value)} required />
+        </div>
+      </div>
+      <div className={cn('rounded-lg p-3 text-sm', Math.abs(discrepancyPct) > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
+        Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
+        {Math.abs(discrepancyPct) > 2 && ' ⚠️ Exceeds tolerance'}
+      </div>
+      <div className="space-y-2">
+        <Label>Abnormality Note</Label>
+        <Textarea value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)} />
+      </div>
+      <Button type="submit" className="w-full" disabled={loading}>
+        {loading ? 'Saving...' : 'Save Adjustment'}
       </Button>
     </form>
   );
