@@ -116,6 +116,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "casting_records_completed_by_user_id_fkey"
+            columns: ["completed_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casting_records_extracted_by_user_id_fkey"
+            columns: ["extracted_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "casting_records_metal_type_id_fkey"
             columns: ["metal_type_id"]
             isOneToOne: false
