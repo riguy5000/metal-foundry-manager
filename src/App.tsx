@@ -17,6 +17,7 @@ import SettingsPage from "./pages/SettingsPage";
 import AdminWarnings from "./pages/AdminWarnings";
 import AdminStatistics from "./pages/AdminStatistics";
 import AdminUsers from "./pages/AdminUsers";
+import AdminLogs from "./pages/AdminLogs";
 import EmployeeHome from "./pages/employee/EmployeeHome";
 import EmployeeExtract from "./pages/employee/EmployeeExtract";
 import EmployeePending from "./pages/employee/EmployeePending";
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="statistics" element={<AdminStatistics />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="audit" element={<AuditLog />} />
+              <Route path="logs" element={<AdminLogs />} />
               <Route path="settings" element={<SettingsPage />} />
               {/* Keep old route working */}
               <Route path="metals" element={<Navigate to="/admin/inventory" replace />} />
