@@ -16,6 +16,7 @@ const navLinks = [
   { to: '/admin/statistics', icon: BarChart3, label: 'Statistics' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
   { to: '/admin/users', icon: Users, label: 'Users' },
+  { to: '/admin/logs', icon: FileText, label: 'Logs' },
 ];
 
 export default function AdminLayout() {

@@ -54,6 +54,7 @@ const App = () => (
               <Route path="statistics" element={<AdminStatistics />} />
               <Route path="users" element={<AdminUsers />} />
               <Route path="audit" element={<AuditLog />} />
+              <Route path="logs" element={<AdminLogs />} />
               <Route path="settings" element={<SettingsPage />} />
               {/* Keep old route working */}
               <Route path="metals" element={<Navigate to="/admin/inventory" replace />} />
