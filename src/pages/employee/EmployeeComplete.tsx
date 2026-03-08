@@ -90,7 +90,8 @@ export default function EmployeeComplete() {
       queryClient.invalidateQueries({ queryKey: ['metal_types'] });
       queryClient.invalidateQueries({ queryKey: ['my_pending'] });
       queryClient.invalidateQueries({ queryKey: ['my_castings'] });
-      setSuccess(true);
+      toast.success('Casting record saved');
+      setTimeout(() => navigate(-1 as any), 1800);
     },
     onError: (e: any) => toast.error(e.message),
   });
