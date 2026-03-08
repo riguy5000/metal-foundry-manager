@@ -20,7 +20,7 @@ export default function EmployeeComplete() {
   const [returnedGrams, setReturnedGrams] = useState('');
   const [jewelryGrams, setJewelryGrams] = useState('');
   const [abnormalityNote, setAbnormalityNote] = useState('');
-  const [success, setSuccess] = useState(false);
+  const [abnormalityNote, setAbnormalityNote] = useState('');
 
   const { data: casting } = useQuery({
     queryKey: ['casting_record', castingId],
