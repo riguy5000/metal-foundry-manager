@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { getMetalDotClass } from '@/lib/metalUtils';
+import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
 import { cn } from '@/lib/utils';
 
 export default function EmployeeComplete() {
@@ -119,7 +119,8 @@ export default function EmployeeComplete() {
   }
 
   const mt = casting.metal_types as any;
-  const dotClass = getMetalDotClass(mt?.color_group ?? '', mt?.metal_family ?? '');
+  const cardClass = getMetalCardClass(mt?.color_group ?? '', mt?.metal_family ?? '');
+  const emoji = getMetalEmoji(mt?.color_group ?? '', mt?.metal_family ?? '');
 
   return (
     <div className="p-4 max-w-lg mx-auto">
@@ -128,47 +129,49 @@ export default function EmployeeComplete() {
         className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Pending
+        Back to pending
       </button>
 
-      {/* Casting info */}
-      <div className="rounded-xl bg-card border border-border p-5 mb-5">
-        <div className="flex items-center gap-2 mb-2">
-          <div className={cn('h-3 w-3 rounded-full', dotClass)} />
-          <span className="text-sm text-muted-foreground">{mt?.metal_name}</span>
+      {/* Casting info card */}
+      <div className={cn('rounded-xl border p-5 mb-6', cardClass)}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-lg">{emoji}</span>
+          <span className="font-semibold text-foreground">{mt?.metal_name}</span>
         </div>
-        <div className="font-mono text-xl font-bold mb-3">{casting.casting_code}</div>
-        <div className="rounded-lg bg-muted px-4 py-3">
-          <div className="text-xs text-muted-foreground mb-0.5">Metal Extracted</div>
-          <div className="font-mono text-3xl font-bold">{extracted.toFixed(2)}<span className="text-sm text-muted-foreground ml-1">g</span></div>
+        <div className="font-mono text-xs text-muted-foreground mb-2">{casting.casting_code}</div>
+        <div className="font-mono text-5xl font-bold text-foreground leading-none">
+          {extracted.toFixed(2)}
         </div>
+        <div className="text-sm text-muted-foreground mt-1">g extracted</div>
       </div>
 
       {/* Simple form — no reconciliation preview, no discrepancy info */}
       <div className="space-y-5">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Finished Jewelry Weight (g)</Label>
+          <Label className="text-base font-semibold">Finished Jewelry (g)</Label>
           <Input
             type="number" step="0.01" min="0"
             value={jewelryGrams} onChange={(e) => setJewelryGrams(e.target.value)}
             placeholder="0.00" className="h-14 text-2xl font-mono text-center" inputMode="decimal"
           />
+          <p className="text-xs text-muted-foreground">Weight of finished jewelry pieces</p>
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Returned Sprue/Button Weight (g)</Label>
+          <Label className="text-base font-semibold">Returned Sprue / Button (g)</Label>
           <Input
             type="number" step="0.01" min="0"
             value={returnedGrams} onChange={(e) => setReturnedGrams(e.target.value)}
             placeholder="0.00" className="h-14 text-2xl font-mono text-center" inputMode="decimal"
           />
+          <p className="text-xs text-muted-foreground">Sprue/button weight to return</p>
         </div>
 
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Notes <span className="text-muted-foreground font-normal">(optional)</span></Label>
+          <Label className="text-base font-semibold">Abnormality Note <span className="text-muted-foreground font-normal">(optional)</span></Label>
           <Textarea
             value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)}
-            placeholder="Any observations" className="min-h-[80px]"
+            placeholder="e.g. Sprue broke during removal" className="min-h-[80px]"
           />
         </div>
 
@@ -177,7 +180,7 @@ export default function EmployeeComplete() {
           disabled={completeMutation.isPending || (returned <= 0 && jewelry <= 0)}
           className="w-full h-14 text-base font-semibold" size="lg"
         >
-          {completeMutation.isPending ? 'Saving...' : 'Save Casting Record'}
+          {completeMutation.isPending ? 'Saving...' : 'Complete Casting'}
         </Button>
       </div>
     </div>

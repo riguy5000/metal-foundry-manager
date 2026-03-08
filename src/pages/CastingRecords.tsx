@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,27 +8,42 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { Plus } from 'lucide-react';
 import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 const statusColor = (status: string) => {
   switch (status) {
-    case 'completed': return 'bg-green-100 text-green-800 border-green-200';
-    case 'flagged': return 'bg-red-100 text-red-800 border-red-200';
-    default: return 'bg-amber-100 text-amber-800 border-amber-200';
+    case 'completed': return 'bg-success/10 text-success border-success/20';
+    case 'flagged': return 'bg-destructive/10 text-destructive border-destructive/20';
+    default: return 'bg-muted text-foreground';
+  }
+};
+
+const statusLabel = (status: string) => {
+  switch (status) {
+    case 'completed': return 'Completed';
+    case 'flagged': return 'Flagged';
+    default: return 'Pending';
   }
 };
 
 export default function CastingRecords() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const [newOpen, setNewOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
   const [selectedCasting, setSelectedCasting] = useState<any>(null);
+
+  // Filter state
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [filterMetal, setFilterMetal] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [discrepancyOnly, setDiscrepancyOnly] = useState(false);
 
   const { data: metals } = useQuery({
     queryKey: ['metal_types'],
@@ -44,7 +59,7 @@ export default function CastingRecords() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('casting_records')
-        .select('*, metal_types(metal_name, karat_label)')
+        .select('*, metal_types(metal_name, karat_label), profiles:extracted_by_user_id(full_name)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
@@ -60,41 +75,22 @@ export default function CastingRecords() {
     },
   });
 
-  const createCasting = useMutation({
-    mutationFn: async (values: any) => {
-      const { error: castError } = await supabase.from('casting_records').insert({
-        casting_code: values.castingCode,
-        metal_type_id: values.metalId,
-        extracted_grams: values.extractedGrams,
-        extracted_by_user_id: user!.id,
-        job_reference: values.jobReference || null,
-        notes: values.notes || null,
-      });
-      if (castError) throw castError;
-
-      // Deduct stock
-      const metal = metals?.find((m) => m.id === values.metalId);
-      if (metal) {
-        const newStock = Number(metal.current_stock_grams) - values.extractedGrams;
-        if (newStock < 0) throw new Error('Insufficient stock');
-        await supabase.from('metal_types').update({ current_stock_grams: newStock }).eq('id', values.metalId);
-        await supabase.from('inventory_transactions').insert({
-          metal_type_id: values.metalId,
-          grams: values.extractedGrams,
-          transaction_type: 'extract_for_casting',
-          entered_by_user_id: user!.id,
-          notes: `Casting ${values.castingCode}`,
-        });
+  // Apply filters
+  const filteredCastings = useMemo(() => {
+    if (!castings) return [];
+    return castings.filter((c) => {
+      if (fromDate && c.created_at < fromDate) return false;
+      if (toDate && c.created_at > toDate + 'T23:59:59') return false;
+      if (filterMetal !== 'all' && c.metal_type_id !== filterMetal) return false;
+      if (filterStatus !== 'all') {
+        if (filterStatus === 'pending' && c.status !== 'extracted_pending_completion') return false;
+        if (filterStatus === 'completed' && c.status !== 'completed') return false;
+        if (filterStatus === 'flagged' && c.status !== 'flagged') return false;
       }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['casting_records'] });
-      queryClient.invalidateQueries({ queryKey: ['metal_types'] });
-      setNewOpen(false);
-      toast.success('Casting record created');
-    },
-    onError: (e: any) => toast.error(e.message),
-  });
+      if (discrepancyOnly && !c.discrepancy_flag) return false;
+      return true;
+    });
+  }, [castings, fromDate, toDate, filterMetal, filterStatus, discrepancyOnly]);
 
   const completeCasting = useMutation({
     mutationFn: async (values: any) => {
@@ -124,7 +120,6 @@ export default function CastingRecords() {
         .eq('id', casting.id);
       if (error) throw error;
 
-      // Return button weight to stock
       if (returnedButton > 0) {
         const metal = metals?.find((m) => m.id === casting.metal_type_id);
         if (metal) {
@@ -153,74 +148,114 @@ export default function CastingRecords() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Casting Records</h1>
-        <Dialog open={newOpen} onOpenChange={setNewOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" />New Casting</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>New Casting Record</DialogTitle></DialogHeader>
-            <NewCastingForm
-              metals={metals ?? []}
-              onSubmit={(v) => createCasting.mutate(v)}
-              loading={createCasting.isPending}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+      <h1 className="text-2xl font-bold">Casting Records</h1>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <p className="text-sm font-medium mb-3">Filters</p>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">From</Label>
+              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="h-9 w-36" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">To</Label>
+              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="h-9 w-36" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Metal</Label>
+              <Select value={filterMetal} onValueChange={setFilterMetal}>
+                <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Metals</SelectItem>
+                  {metals?.map((m) => <SelectItem key={m.id} value={m.id}>{m.metal_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Status</Label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="flagged">Flagged</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2 pb-0.5">
+              <Checkbox
+                id="disc-only"
+                checked={discrepancyOnly}
+                onCheckedChange={(v) => setDiscrepancyOnly(!!v)}
+              />
+              <Label htmlFor="disc-only" className="text-sm">Discrepancy only</Label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <p className="text-sm text-muted-foreground">{filteredCastings.length} records</p>
 
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Date</TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Metal</TableHead>
-                <TableHead className="text-right">Extracted (g)</TableHead>
-                <TableHead className="text-right">Returned (g)</TableHead>
-                <TableHead className="text-right">Jewelry (g)</TableHead>
-                <TableHead className="text-right">Discrepancy</TableHead>
+                <TableHead className="text-right">Extracted</TableHead>
+                <TableHead className="text-right">Jewelry</TableHead>
+                <TableHead className="text-right">Returned</TableHead>
+                <TableHead className="text-right">Disc. (g)</TableHead>
+                <TableHead className="text-right">Disc. %</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead></TableHead>
+                <TableHead>Extracted By</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {castings?.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell className="font-mono font-medium">{c.casting_code}</TableCell>
-                  <TableCell>{(c.metal_types as any)?.metal_name} {(c.metal_types as any)?.karat_label}</TableCell>
-                  <TableCell className="text-right font-mono">{Number(c.extracted_grams).toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-mono">{c.returned_button_grams != null ? Number(c.returned_button_grams).toFixed(2) : '—'}</TableCell>
-                  <TableCell className="text-right font-mono">{c.finished_jewelry_grams != null ? Number(c.finished_jewelry_grams).toFixed(2) : '—'}</TableCell>
-                  <TableCell className="text-right font-mono">
-                    {c.discrepancy_percent != null ? (
-                      <span className={Math.abs(Number(c.discrepancy_percent)) > 2 ? 'text-destructive font-bold' : ''}>
-                        {Number(c.discrepancy_percent).toFixed(2)}%
-                      </span>
-                    ) : '—'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={statusColor(c.status)}>{c.status.replace(/_/g, ' ')}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{format(new Date(c.created_at), 'MMM d, yyyy')}</TableCell>
-                  <TableCell>
-                    {c.status === 'extracted_pending_completion' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => { setSelectedCasting(c); setCompleteOpen(true); }}
-                      >
-                        Complete
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              {(!castings || castings.length === 0) && (
+              {filteredCastings.map((c) => {
+                const profile = c.profiles as any;
+                return (
+                  <TableRow key={c.id} className={cn(c.status === 'extracted_pending_completion' && 'cursor-pointer hover:bg-muted/50')} onClick={() => {
+                    if (c.status === 'extracted_pending_completion') {
+                      setSelectedCasting(c);
+                      setCompleteOpen(true);
+                    }
+                  }}>
+                    <TableCell className="text-sm text-muted-foreground">{format(new Date(c.created_at), 'M/d/yyyy')}</TableCell>
+                    <TableCell className="font-mono text-sm font-medium">{c.casting_code}</TableCell>
+                    <TableCell className="text-sm">{(c.metal_types as any)?.metal_name}</TableCell>
+                    <TableCell className="text-right font-mono text-sm font-bold">{Number(c.extracted_grams).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{c.finished_jewelry_grams != null ? Number(c.finished_jewelry_grams).toFixed(2) : '—'}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{c.returned_button_grams != null ? Number(c.returned_button_grams).toFixed(2) : '—'}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {c.discrepancy_grams != null ? Number(c.discrepancy_grams).toFixed(2) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {c.discrepancy_percent != null ? (
+                        <span className={cn(
+                          Math.abs(Number(c.discrepancy_percent)) > 2 ? 'text-destructive font-bold' : ''
+                        )}>
+                          {Number(c.discrepancy_percent).toFixed(1)}%
+                        </span>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={cn('text-[10px]', statusColor(c.status))}>
+                        {statusLabel(c.status)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{profile?.full_name ?? '—'}</TableCell>
+                  </TableRow>
+                );
+              })}
+              {filteredCastings.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center text-muted-foreground">No casting records</TableCell>
+                  <TableCell colSpan={10} className="text-center text-muted-foreground py-8">No casting records</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -241,51 +276,6 @@ export default function CastingRecords() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function NewCastingForm({ metals, onSubmit, loading }: { metals: any[]; onSubmit: (v: any) => void; loading: boolean }) {
-  const [castingCode, setCastingCode] = useState('');
-  const [metalId, setMetalId] = useState('');
-  const [extractedGrams, setExtractedGrams] = useState('');
-  const [jobReference, setJobReference] = useState('');
-  const [notes, setNotes] = useState('');
-
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ castingCode, metalId, extractedGrams: parseFloat(extractedGrams), jobReference, notes }); }} className="space-y-4">
-      <div className="space-y-2">
-        <Label>Casting Code</Label>
-        <Input value={castingCode} onChange={(e) => setCastingCode(e.target.value)} required />
-      </div>
-      <div className="space-y-2">
-        <Label>Metal</Label>
-        <Select value={metalId} onValueChange={setMetalId}>
-          <SelectTrigger><SelectValue placeholder="Select metal" /></SelectTrigger>
-          <SelectContent>
-            {metals.map((m) => (
-              <SelectItem key={m.id} value={m.id}>{m.metal_name} {m.karat_label} ({Number(m.current_stock_grams).toFixed(1)}g available)</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Extracted Grams</Label>
-          <Input type="number" step="0.01" min="0.01" value={extractedGrams} onChange={(e) => setExtractedGrams(e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label>Job Reference</Label>
-          <Input value={jobReference} onChange={(e) => setJobReference(e.target.value)} />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label>Notes</Label>
-        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </div>
-      <Button type="submit" className="w-full" disabled={loading || !metalId}>
-        {loading ? 'Creating...' : 'Create Casting'}
-      </Button>
-    </form>
   );
 }
 
@@ -316,7 +306,7 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
         </div>
       </div>
       {(returned > 0 || jewelry > 0) && (
-        <div className={`rounded-lg p-3 text-sm ${Math.abs(discrepancyPct) > 2 ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+        <div className={cn('rounded-lg p-3 text-sm', Math.abs(discrepancyPct) > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
           Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
           {Math.abs(discrepancyPct) > 2 && ' ⚠️ Exceeds tolerance'}
         </div>

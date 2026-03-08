@@ -3,25 +3,23 @@ import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Package, FlaskConical, ArrowRightLeft,
-  AlertTriangle, BarChart3, Users, Settings, FileText, LogOut, Menu, X
+  AlertTriangle, BarChart3, Users, Settings, FileText, LogOut, Menu, Eye
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
-const links = [
+const navLinks = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/inventory', icon: Package, label: 'Inventory' },
   { to: '/admin/castings', icon: FlaskConical, label: 'Castings' },
   { to: '/admin/warnings', icon: AlertTriangle, label: 'Warnings' },
-  { to: '/admin/transactions', icon: ArrowRightLeft, label: 'Transactions' },
   { to: '/admin/statistics', icon: BarChart3, label: 'Statistics' },
-  { to: '/admin/users', icon: Users, label: 'Users' },
-  { to: '/admin/audit', icon: FileText, label: 'Audit Log' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },
+  { to: '/admin/users', icon: Users, label: 'Users' },
 ];
 
 export default function AdminLayout() {
-  const { signOut, user } = useAuth();
+  const { signOut } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -33,13 +31,16 @@ export default function AdminLayout() {
   const sidebar = (
     <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
       <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
-          M
-        </div>
+        <span className="text-xl">⚒️</span>
         <span className="text-base font-semibold tracking-tight">Metal CRM</span>
       </div>
-      <nav className="flex-1 space-y-0.5 p-2 overflow-y-auto">
-        {links.map((link) => (
+
+      <div className="px-4 pt-4 pb-1">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Navigation</p>
+      </div>
+
+      <nav className="flex-1 space-y-0.5 px-2 overflow-y-auto">
+        {navLinks.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
@@ -59,14 +60,24 @@ export default function AdminLayout() {
           </NavLink>
         ))}
       </nav>
+
       <div className="border-t border-sidebar-border p-2">
-        <div className="mb-1.5 px-3 text-[11px] text-muted-foreground truncate">{user?.email}</div>
+        <div className="px-3 pb-1">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Admin</p>
+        </div>
+        <button
+          onClick={() => { navigate('/employee'); setSidebarOpen(false); }}
+          className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+        >
+          <Eye className="h-4 w-4" />
+          Employee View
+        </button>
         <button
           onClick={handleSignOut}
           className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
         >
           <LogOut className="h-4 w-4" />
-          Sign Out
+          Sign out
         </button>
       </div>
     </div>
