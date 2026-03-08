@@ -8,11 +8,18 @@ import { format } from 'date-fns';
 import { getMetalDotClass } from '@/lib/metalUtils';
 import { cn } from '@/lib/utils';
 
+function getSeverity(current: number, threshold: number) {
+  if (current <= 0) return { label: 'Critical', className: 'bg-destructive text-destructive-foreground' };
+  const ratio = current / threshold;
+  if (ratio < 0.5) return { label: 'Warning', className: 'bg-warning/20 text-warning border-warning/30' };
+  return { label: 'Low', className: 'bg-muted text-foreground' };
+}
+
 export default function AdminWarnings() {
   const { data: metals } = useQuery({
     queryKey: ['metal_types'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('metal_types').select('*').order('display_order');
+      const { data, error } = await supabase.from('metal_types').select('*').order('current_stock_grams', { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -23,7 +30,7 @@ export default function AdminWarnings() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('casting_records')
-        .select('*, metal_types(metal_name, karat_label, color_group, metal_family)')
+        .select('*, metal_types(metal_name, karat_label, color_group, metal_family), profiles:extracted_by_user_id(full_name)')
         .eq('status', 'flagged')
         .order('completed_at', { ascending: false });
       if (error) throw error;
@@ -37,119 +44,112 @@ export default function AdminWarnings() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Warnings & Discrepancies</h1>
+      <h1 className="text-2xl font-bold tracking-tight">Warnings</h1>
 
-      {/* Low stock section */}
-      <Card className={cn(lowStockMetals.length > 0 && 'border-destructive/30')}>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <AlertTriangle className={cn('h-4 w-4', lowStockMetals.length > 0 ? 'text-destructive' : 'text-muted-foreground')} />
-            Low Stock Alerts
-            {lowStockMetals.length > 0 && (
-              <Badge variant="destructive" className="ml-auto">{lowStockMetals.length}</Badge>
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Low stock section */}
+        <Card className={cn(lowStockMetals.length > 0 && 'border-destructive/30')}>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className={cn('h-4 w-4', lowStockMetals.length > 0 ? 'text-destructive' : 'text-muted-foreground')} />
+              Low Stock Alerts
+              {lowStockMetals.length > 0 && (
+                <Badge variant="destructive" className="ml-auto">{lowStockMetals.length}</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {lowStockMetals.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">All metals above minimum threshold ✓</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Metal</TableHead>
+                    <TableHead className="text-right">Current (g)</TableHead>
+                    <TableHead className="text-right">Threshold (g)</TableHead>
+                    <TableHead>Severity</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lowStockMetals.map((m) => {
+                    const severity = getSeverity(Number(m.current_stock_grams), Number(m.minimum_threshold_grams));
+                    return (
+                      <TableRow key={m.id}>
+                        <TableCell className="font-medium">{m.metal_name}</TableCell>
+                        <TableCell className="text-right font-mono text-destructive font-bold">
+                          {Number(m.current_stock_grams).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">
+                          {Number(m.minimum_threshold_grams).toFixed(0)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn('text-xs', severity.className)}>
+                            {severity.label}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {lowStockMetals.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">All metals above minimum threshold ✓</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Metal</TableHead>
-                  <TableHead className="text-right">Current Stock</TableHead>
-                  <TableHead className="text-right">Threshold</TableHead>
-                  <TableHead className="text-right">Deficit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {lowStockMetals.map((m) => {
-                  const dotClass = getMetalDotClass(m.color_group, m.metal_family);
-                  const deficit = Number(m.minimum_threshold_grams) - Number(m.current_stock_grams);
-                  return (
-                    <TableRow key={m.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className={cn('h-2.5 w-2.5 rounded-full', dotClass)} />
-                          <span className="font-medium">{m.metal_name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-destructive font-bold">
-                        {Number(m.current_stock_grams).toFixed(1)}g
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-muted-foreground">
-                        {Number(m.minimum_threshold_grams).toFixed(0)}g
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-destructive">
-                        -{deficit.toFixed(1)}g
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Flagged castings section */}
-      <Card className={cn(flaggedCastings && flaggedCastings.length > 0 && 'border-warning/30')}>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Flag className={cn('h-4 w-4', flaggedCastings && flaggedCastings.length > 0 ? 'text-warning' : 'text-muted-foreground')} />
-            Discrepancy Alerts
-            {flaggedCastings && flaggedCastings.length > 0 && (
-              <Badge className="ml-auto bg-warning text-warning-foreground">{flaggedCastings.length}</Badge>
+        {/* Flagged castings section */}
+        <Card className={cn(flaggedCastings && flaggedCastings.length > 0 && 'border-destructive/30')}>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Flag className={cn('h-4 w-4', flaggedCastings && flaggedCastings.length > 0 ? 'text-destructive' : 'text-muted-foreground')} />
+              Discrepancy Alerts
+              {flaggedCastings && flaggedCastings.length > 0 && (
+                <Badge variant="destructive" className="ml-auto">{flaggedCastings.length}</Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {!flaggedCastings || flaggedCastings.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">No discrepancy alerts ✓</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Metal</TableHead>
+                    <TableHead className="text-right">Disc. %</TableHead>
+                    <TableHead className="text-right">Lost (g)</TableHead>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {flaggedCastings.map((c) => {
+                    const mt = c.metal_types as any;
+                    const profile = c.profiles as any;
+                    return (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-mono text-sm">{c.casting_code}</TableCell>
+                        <TableCell className="text-sm">{mt?.metal_name}</TableCell>
+                        <TableCell className="text-right font-mono text-sm text-destructive font-bold">
+                          {Number(c.discrepancy_percent).toFixed(1)}%
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {Number(c.discrepancy_grams).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-sm">{profile?.full_name ?? '—'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {c.completed_at ? format(new Date(c.completed_at), 'M/d/yy') : '—'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!flaggedCastings || flaggedCastings.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">No discrepancy alerts ✓</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Metal</TableHead>
-                  <TableHead className="text-right">Extracted</TableHead>
-                  <TableHead className="text-right">Discrepancy</TableHead>
-                  <TableHead className="text-right">%</TableHead>
-                  <TableHead>Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {flaggedCastings.map((c) => {
-                  const mt = c.metal_types as any;
-                  const dotClass = getMetalDotClass(mt?.color_group ?? '', mt?.metal_family ?? '');
-                  return (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-mono font-bold text-sm">{c.casting_code}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div className={cn('h-2 w-2 rounded-full', dotClass)} />
-                          <span className="text-sm">{mt?.metal_name}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">{Number(c.extracted_grams).toFixed(2)}g</TableCell>
-                      <TableCell className="text-right font-mono text-sm text-destructive font-bold">
-                        {Number(c.discrepancy_grams).toFixed(2)}g
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-destructive font-bold">
-                        {Number(c.discrepancy_percent).toFixed(2)}%
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {c.completed_at ? format(new Date(c.completed_at), 'MMM d, yyyy') : '—'}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

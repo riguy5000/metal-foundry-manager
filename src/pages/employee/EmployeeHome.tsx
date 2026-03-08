@@ -1,13 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import { getMetalCardClass, getMetalDotClass } from '@/lib/metalUtils';
-import { AlertTriangle, ArrowRight } from 'lucide-react';
+import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
+import { AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
-/** Sort order for metal families */
 const FAMILY_ORDER = ['Gold', 'Platinum', 'Palladium', 'Silver'];
-/** Sort order for color groups within Gold */
 const COLOR_ORDER = ['Yellow', 'White', 'Rose', 'Red'];
 
 interface MetalType {
@@ -43,6 +42,14 @@ function getColorLabel(color: string) {
   }
 }
 
+function getShortName(metalName: string, colorGroup: string, metalFamily: string): string {
+  if (metalFamily !== 'Gold') return metalName;
+  // For gold: show "10K Yellow", "14K Red", etc.
+  const karat = metalName.match(/^\d+K/)?.[0] ?? '';
+  const color = colorGroup === 'Red' ? 'Red' : colorGroup;
+  return `${karat} ${color}`;
+}
+
 export default function EmployeeHome() {
   const navigate = useNavigate();
 
@@ -72,35 +79,33 @@ export default function EmployeeHome() {
     );
   }
 
-  // Group metals: Family -> Color (for Gold) or flat (for others)
   const grouped = buildHierarchy(metals ?? []);
 
   return (
     <div className="p-4 pb-2">
       <div className="mb-5">
-        <h1 className="text-xl font-bold tracking-tight">Select Metal</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Select Metal</h1>
         <p className="text-sm text-muted-foreground">Tap a metal to extract for casting</p>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         {grouped.map((familyGroup) => (
           <div key={familyGroup.family}>
             {/* Family header */}
             <div className="flex items-center gap-2 mb-3 px-1">
               <span className="text-lg">{getFamilyIcon(familyGroup.family)}</span>
-              <h2 className="text-base font-bold tracking-tight">{familyGroup.family}</h2>
+              <h2 className="text-lg font-bold tracking-tight">{familyGroup.family}</h2>
               <div className="flex-1 h-px bg-border ml-2" />
             </div>
 
             {familyGroup.family === 'Gold' ? (
-              // Gold: subdivide by color
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {familyGroup.colorGroups.map((colorGroup) => (
                   <div key={colorGroup.color}>
                     <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-1">
                       {getColorLabel(colorGroup.color)}
                     </p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                       {colorGroup.metals.map((metal) => (
                         <MetalCard key={metal.id} metal={metal} onTap={() => navigate(`/employee/extract/${metal.id}`)} />
                       ))}
@@ -109,8 +114,7 @@ export default function EmployeeHome() {
                 ))}
               </div>
             ) : (
-              // Non-gold: flat list
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {familyGroup.metals.map((metal) => (
                   <MetalCard key={metal.id} metal={metal} onTap={() => navigate(`/employee/extract/${metal.id}`)} />
                 ))}
@@ -126,7 +130,8 @@ export default function EmployeeHome() {
 function MetalCard({ metal, onTap }: { metal: MetalType; onTap: () => void }) {
   const lowStock = metal.low_stock_warning_enabled && metal.current_stock_grams < metal.minimum_threshold_grams;
   const cardClass = getMetalCardClass(metal.color_group, metal.metal_family);
-  const dotClass = getMetalDotClass(metal.color_group, metal.metal_family);
+  const emoji = getMetalEmoji(metal.color_group, metal.metal_family);
+  const shortName = getShortName(metal.metal_name, metal.color_group, metal.metal_family);
 
   return (
     <button
@@ -134,34 +139,33 @@ function MetalCard({ metal, onTap }: { metal: MetalType; onTap: () => void }) {
       className={cn(
         'relative flex flex-col items-start rounded-xl p-4 text-left transition-all',
         'active:scale-[0.98] hover:shadow-md',
-        'min-h-[110px]',
+        'min-h-[120px] border',
         cardClass
       )}
     >
-      <div className="flex items-center gap-2 mb-1.5">
-        <div className={cn('h-3 w-3 rounded-full', dotClass)} />
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          {metal.karat_label}
+      {lowStock && (
+        <Badge variant="destructive" className="absolute top-2 right-2 text-[10px] gap-1 px-1.5">
+          <AlertTriangle className="h-3 w-3" />
+          Low
+        </Badge>
+      )}
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="text-base">{emoji}</span>
+        <span className="text-sm font-semibold leading-tight text-foreground">
+          {shortName}
         </span>
       </div>
-      <span className="text-sm font-semibold leading-tight text-foreground mb-auto">
-        {metal.metal_name}
-      </span>
-      <div className="flex items-end justify-between w-full mt-2.5">
-        <div>
-          <span className="font-mono text-xl font-bold leading-none text-foreground">
+      <div className="mt-auto w-full">
+        <div className="flex items-baseline gap-0.5">
+          <span className="font-mono text-2xl font-bold leading-none text-foreground">
             {Number(metal.current_stock_grams).toFixed(1)}
           </span>
-          <span className="text-[10px] text-muted-foreground ml-0.5">g</span>
+          <span className="text-xs text-muted-foreground ml-0.5">g</span>
         </div>
-        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mt-2">
+          EXTRACT &gt;
+        </div>
       </div>
-      {lowStock && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5">
-          <AlertTriangle className="h-3 w-3 text-destructive" />
-          <span className="text-[9px] font-semibold text-destructive">LOW</span>
-        </div>
-      )}
     </button>
   );
 }
@@ -181,7 +185,6 @@ function buildHierarchy(metals: MetalType[]): FamilyGroup[] {
   }
 
   const result: FamilyGroup[] = [];
-  // Sorted families
   const families = Object.keys(familyMap).sort((a, b) => {
     const ai = FAMILY_ORDER.indexOf(a);
     const bi = FAMILY_ORDER.indexOf(b);

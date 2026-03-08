@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { toast } from 'sonner';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { Plus, Edit } from 'lucide-react';
+import { Plus, Edit, Clock } from 'lucide-react';
 import { getMetalDotClass } from '@/lib/metalUtils';
 import { cn } from '@/lib/utils';
 
@@ -19,7 +19,9 @@ export default function MetalInventory() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [addMetalOpen, setAddMetalOpen] = useState(false);
+  const [addStockOpen, setAddStockOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [thresholdOpen, setThresholdOpen] = useState(false);
   const [selectedMetal, setSelectedMetal] = useState<any>(null);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -53,6 +55,7 @@ export default function MetalInventory() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['metal_types'] });
       setEditOpen(false);
+      setThresholdOpen(false);
       toast.success('Metal updated');
     },
     onError: (e: any) => toast.error(e.message),
@@ -72,7 +75,7 @@ export default function MetalInventory() {
       const metal = metals?.find((m) => m.id === metalId);
       if (!metal) throw new Error('Metal not found');
 
-      const delta = type === 'add_stock' || type === 'return_from_casting' ? Math.abs(grams) : -Math.abs(grams);
+      const delta = type === 'add_stock' ? Math.abs(grams) : -Math.abs(grams);
       const newStock = Number(metal.current_stock_grams) + delta;
 
       const { error: updateError } = await supabase
@@ -83,8 +86,9 @@ export default function MetalInventory() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['metal_types'] });
+      setAddStockOpen(false);
       setAdjustOpen(false);
-      toast.success('Stock adjusted');
+      toast.success('Stock updated');
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -92,27 +96,16 @@ export default function MetalInventory() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Metal Inventory</h1>
-        <div className="flex gap-2">
-          <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" size="sm">Adjust Stock</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Adjust Stock</DialogTitle></DialogHeader>
-              <StockAdjustForm metals={metals ?? []} onSubmit={(v) => adjustStockMutation.mutate(v)} loading={adjustStockMutation.isPending} />
-            </DialogContent>
-          </Dialog>
-          <Dialog open={addMetalOpen} onOpenChange={setAddMetalOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm"><Plus className="mr-1.5 h-3.5 w-3.5" />Add Metal</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Add Metal Type</DialogTitle></DialogHeader>
-              <MetalForm onSubmit={(v) => addMetalMutation.mutate(v)} loading={addMetalMutation.isPending} />
-            </DialogContent>
-          </Dialog>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight">Inventory</h1>
+        <Dialog open={addMetalOpen} onOpenChange={setAddMetalOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm"><Plus className="mr-1.5 h-3.5 w-3.5" />Add Metal</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader><DialogTitle>Add Metal Type</DialogTitle></DialogHeader>
+            <MetalForm onSubmit={(v) => addMetalMutation.mutate(v)} loading={addMetalMutation.isPending} />
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Card>
@@ -121,12 +114,11 @@ export default function MetalInventory() {
             <TableHeader>
               <TableRow>
                 <TableHead>Metal</TableHead>
-                <TableHead>Karat</TableHead>
                 <TableHead>Family</TableHead>
                 <TableHead className="text-right">Stock (g)</TableHead>
-                <TableHead className="text-right">Min (g)</TableHead>
+                <TableHead className="text-right">Threshold (g)</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead></TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -141,9 +133,8 @@ export default function MetalInventory() {
                         <span className="font-medium">{m.metal_name}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{m.karat_label}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{m.metal_family}</TableCell>
-                    <TableCell className={cn('text-right font-mono', lowStock ? 'text-destructive font-bold' : '')}>
+                    <TableCell className={cn('text-right font-mono font-bold', lowStock ? 'text-destructive' : '')}>
                       {Number(m.current_stock_grams).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{Number(m.minimum_threshold_grams).toFixed(0)}</TableCell>
@@ -151,15 +142,35 @@ export default function MetalInventory() {
                       {!m.active_status ? (
                         <Badge variant="secondary" className="text-[10px]">Inactive</Badge>
                       ) : lowStock ? (
-                        <Badge variant="destructive" className="text-[10px]">Low Stock</Badge>
+                        <Badge variant="destructive" className="text-[10px]">⚠ Low</Badge>
                       ) : (
                         <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-[10px]">OK</Badge>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setSelectedMetal(m); setEditOpen(true); }}>
-                        <Edit className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="outline" size="sm" className="h-7 text-xs"
+                          onClick={() => { setSelectedMetal(m); setAddStockOpen(true); }}
+                        >
+                          + Add
+                        </Button>
+                        <Button
+                          variant="outline" size="sm" className="h-7 text-xs"
+                          onClick={() => { setSelectedMetal(m); setAdjustOpen(true); }}
+                        >
+                          <Edit className="h-3 w-3 mr-1" />Adjust
+                        </Button>
+                        <Button
+                          variant="ghost" size="sm" className="h-7 text-xs"
+                          onClick={() => { setSelectedMetal(m); setThresholdOpen(true); }}
+                        >
+                          Threshold
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -169,6 +180,51 @@ export default function MetalInventory() {
         </CardContent>
       </Card>
 
+      {/* Add Stock Dialog */}
+      <Dialog open={addStockOpen} onOpenChange={setAddStockOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Stock — {selectedMetal?.metal_name}</DialogTitle>
+          </DialogHeader>
+          {selectedMetal && (
+            <AddStockForm
+              metal={selectedMetal}
+              onSubmit={(v) => adjustStockMutation.mutate({ metalId: selectedMetal.id, grams: v.grams, type: 'add_stock', notes: v.notes })}
+              loading={adjustStockMutation.isPending}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Adjust Stock Dialog */}
+      <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Adjust Stock — {selectedMetal?.metal_name}</DialogTitle></DialogHeader>
+          {selectedMetal && (
+            <AdjustStockForm
+              metal={selectedMetal}
+              onSubmit={(v) => adjustStockMutation.mutate({ metalId: selectedMetal.id, grams: v.grams, type: v.type, notes: v.notes })}
+              loading={adjustStockMutation.isPending}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Threshold Dialog */}
+      <Dialog open={thresholdOpen} onOpenChange={setThresholdOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Set Threshold — {selectedMetal?.metal_name}</DialogTitle></DialogHeader>
+          {selectedMetal && (
+            <ThresholdForm
+              metal={selectedMetal}
+              onSubmit={(threshold) => updateMetalMutation.mutate({ id: selectedMetal.id, minimum_threshold_grams: threshold })}
+              loading={updateMetalMutation.isPending}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Metal Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Metal Type</DialogTitle></DialogHeader>
@@ -178,6 +234,69 @@ export default function MetalInventory() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function AddStockForm({ metal, onSubmit, loading }: { metal: any; onSubmit: (v: any) => void; loading: boolean }) {
+  const [grams, setGrams] = useState('');
+  const [notes, setNotes] = useState('');
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ grams: parseFloat(grams), notes }); }} className="space-y-4">
+      <p className="text-sm text-muted-foreground">Current: {Number(metal.current_stock_grams).toFixed(2)}g</p>
+      <div className="space-y-2">
+        <Label>Grams to Add</Label>
+        <Input type="number" step="0.01" min="0.01" value={grams} onChange={(e) => setGrams(e.target.value)} placeholder="0.00" required />
+      </div>
+      <div className="space-y-2">
+        <Label>Notes (optional)</Label>
+        <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Supplier delivery" />
+      </div>
+      <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Adding...' : 'Add Stock'}</Button>
+    </form>
+  );
+}
+
+function AdjustStockForm({ metal, onSubmit, loading }: { metal: any; onSubmit: (v: any) => void; loading: boolean }) {
+  const [grams, setGrams] = useState('');
+  const [type, setType] = useState<string>('add_stock');
+  const [notes, setNotes] = useState('');
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ grams: parseFloat(grams), type, notes }); }} className="space-y-4">
+      <p className="text-sm text-muted-foreground">Current: {Number(metal.current_stock_grams).toFixed(2)}g</p>
+      <div className="space-y-2">
+        <Label>Type</Label>
+        <Select value={type} onValueChange={setType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
+          <SelectItem value="add_stock">Add Stock</SelectItem>
+          <SelectItem value="manual_adjustment">Manual Adjustment (subtract)</SelectItem>
+        </SelectContent></Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Grams</Label>
+        <Input type="number" step="0.01" min="0.01" value={grams} onChange={(e) => setGrams(e.target.value)} required />
+      </div>
+      <div className="space-y-2">
+        <Label>Notes / Reason (required)</Label>
+        <Input value={notes} onChange={(e) => setNotes(e.target.value)} required placeholder="Reason for adjustment" />
+      </div>
+      <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Processing...' : 'Adjust Stock'}</Button>
+    </form>
+  );
+}
+
+function ThresholdForm({ metal, onSubmit, loading }: { metal: any; onSubmit: (v: number) => void; loading: boolean }) {
+  const [threshold, setThreshold] = useState(String(metal.minimum_threshold_grams));
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(parseFloat(threshold)); }} className="space-y-4">
+      <p className="text-sm text-muted-foreground">Current stock: {Number(metal.current_stock_grams).toFixed(2)}g</p>
+      <div className="space-y-2">
+        <Label>Minimum Threshold (g)</Label>
+        <Input type="number" step="0.01" min="0" value={threshold} onChange={(e) => setThreshold(e.target.value)} required />
+      </div>
+      <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Saving...' : 'Save Threshold'}</Button>
+    </form>
   );
 }
 
@@ -211,36 +330,6 @@ function MetalForm({ initial, onSubmit, loading }: { initial?: any; onSubmit: (v
         <Label htmlFor="active">Active</Label>
       </div>
       <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Saving...' : initial ? 'Update' : 'Add Metal'}</Button>
-    </form>
-  );
-}
-
-function StockAdjustForm({ metals, onSubmit, loading }: { metals: any[]; onSubmit: (v: any) => void; loading: boolean }) {
-  const [metalId, setMetalId] = useState('');
-  const [grams, setGrams] = useState('');
-  const [type, setType] = useState<string>('add_stock');
-  const [notes, setNotes] = useState('');
-
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ metalId, grams: parseFloat(grams), type, notes }); }} className="space-y-4">
-      <div className="space-y-2">
-        <Label>Metal</Label>
-        <Select value={metalId} onValueChange={setMetalId}><SelectTrigger><SelectValue placeholder="Select metal" /></SelectTrigger><SelectContent>
-          {metals.filter((m) => m.active_status).map((m) => <SelectItem key={m.id} value={m.id}>{m.metal_name} {m.karat_label}</SelectItem>)}
-        </SelectContent></Select>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Type</Label>
-          <Select value={type} onValueChange={setType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
-            <SelectItem value="add_stock">Add Stock</SelectItem>
-            <SelectItem value="manual_adjustment">Manual Adjustment (subtract)</SelectItem>
-          </SelectContent></Select>
-        </div>
-        <div className="space-y-2"><Label>Grams</Label><Input type="number" step="0.01" min="0.01" value={grams} onChange={(e) => setGrams(e.target.value)} required /></div>
-      </div>
-      <div className="space-y-2"><Label>Notes / Reason</Label><Input value={notes} onChange={(e) => setNotes(e.target.value)} required placeholder="Required: reason for adjustment" /></div>
-      <Button type="submit" className="w-full" disabled={loading || !metalId}>{loading ? 'Processing...' : 'Adjust Stock'}</Button>
     </form>
   );
 }

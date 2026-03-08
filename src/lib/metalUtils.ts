@@ -28,6 +28,19 @@ export function getMetalDotClass(colorGroup: string, metalFamily: string): strin
   return 'metal-dot-yellow';
 }
 
+export function getMetalEmoji(colorGroup: string, metalFamily: string): string {
+  const color = colorGroup?.toLowerCase() ?? '';
+  const family = metalFamily?.toLowerCase() ?? '';
+  
+  if (family === 'platinum') return '💎';
+  if (family === 'palladium') return '🔘';
+  if (family === 'silver') return '🥈';
+  if (color === 'red') return '🥇';
+  if (color === 'rose') return '🥇';
+  if (color === 'white') return '🥇';
+  return '🥇';
+}
+
 export function getMetalAccentColor(colorGroup: string, metalFamily: string): string {
   const color = colorGroup?.toLowerCase() ?? '';
   const family = metalFamily?.toLowerCase() ?? '';
@@ -41,14 +54,19 @@ export function getMetalAccentColor(colorGroup: string, metalFamily: string): st
   return 'text-metal-yellow';
 }
 
-/** Generate a flask code: FL-YYMMDD-SEQ */
+/** Generate a flask code: CST-YYYYMMDD-XXXX */
 export function generateFlaskCode(sequence: number = 1): string {
   const now = new Date();
-  const yy = String(now.getFullYear()).slice(2);
+  const yyyy = String(now.getFullYear());
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
-  const seq = String(sequence).padStart(3, '0');
-  return `FL-${yy}${mm}${dd}-${seq}`;
+  // Random 4 char alphanumeric suffix for uniqueness
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+  let suffix = '';
+  for (let i = 0; i < 4; i++) {
+    suffix += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return `CST-${yyyy}${mm}${dd}-${suffix}`;
 }
 
 /** Group metals by family for hierarchical selection */

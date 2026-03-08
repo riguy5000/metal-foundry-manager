@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import { getMetalDotClass } from '@/lib/metalUtils';
-import { Clock, ArrowRight } from 'lucide-react';
+import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
+import { Clock, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, differenceInHours } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 export default function EmployeePending() {
   const navigate = useNavigate();
@@ -24,15 +25,22 @@ export default function EmployeePending() {
 
   return (
     <div className="p-4">
-      <div className="mb-4">
-        <h1 className="text-xl font-bold tracking-tight">Pending Castings</h1>
-        <p className="text-sm text-muted-foreground">Tap to complete after casting</p>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Pending Castings</h1>
+          <p className="text-sm text-muted-foreground">Tap to complete a casting</p>
+        </div>
+        {castings && castings.length > 0 && (
+          <div className="flex items-center justify-center h-8 w-8 rounded-full bg-foreground text-background text-sm font-bold">
+            {castings.length}
+          </div>
+        )}
       </div>
 
       {isLoading ? (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />
+            <div key={i} className="h-32 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
       ) : castings?.length === 0 ? (
@@ -42,32 +50,47 @@ export default function EmployeePending() {
           <p className="text-sm text-muted-foreground">Extract metal first to create a casting</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {castings?.map((c) => {
             const mt = c.metal_types as any;
-            const dotClass = getMetalDotClass(mt?.color_group ?? '', mt?.metal_family ?? '');
+            const cardClass = getMetalCardClass(mt?.color_group ?? '', mt?.metal_family ?? '');
+            const emoji = getMetalEmoji(mt?.color_group ?? '', mt?.metal_family ?? '');
+            const hoursAgo = differenceInHours(new Date(), new Date(c.extracted_at));
+            const isAging = hoursAgo >= 2;
+
             return (
               <button
                 key={c.id}
                 onClick={() => navigate(`/employee/complete/${c.id}`)}
-                className="flex w-full items-center gap-4 rounded-xl bg-card border border-border p-4 text-left transition-all hover:shadow-md active:scale-[0.99]"
+                className={cn(
+                  'flex w-full items-center rounded-xl p-5 text-left transition-all hover:shadow-md active:scale-[0.99] border',
+                  cardClass
+                )}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className={cn('h-2.5 w-2.5 rounded-full', dotClass)} />
-                    <span className="text-xs text-muted-foreground">{mt?.metal_name}</span>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="text-lg">{emoji}</span>
+                    <span className="font-semibold text-foreground">{mt?.metal_name}</span>
+                    <Badge variant="outline" className="font-mono text-xs bg-background/60">
+                      {c.casting_code}
+                    </Badge>
+                    {isAging && (
+                      <Badge className="bg-warning/20 text-warning border-warning/30 text-xs">
+                        {hoursAgo}h — Aging
+                      </Badge>
+                    )}
                   </div>
-                  <div className="font-mono text-base font-bold">{c.casting_code}</div>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-sm text-muted-foreground">
-                      <span className="font-mono font-semibold text-foreground">{Number(c.extracted_grams).toFixed(2)}g</span> extracted
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDistanceToNow(new Date(c.extracted_at), { addSuffix: true })}
-                    </span>
+                  <div className="font-mono text-4xl font-bold text-foreground leading-none">
+                    {Number(c.extracted_grams).toFixed(2)}
+                  </div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    <span>g extracted</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {formatDistanceToNow(new Date(c.extracted_at), { addSuffix: true })}
                   </div>
                 </div>
-                <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
               </button>
             );
           })}
