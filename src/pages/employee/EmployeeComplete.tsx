@@ -95,24 +95,6 @@ export default function EmployeeComplete() {
     onError: (e: any) => toast.error(e.message),
   });
 
-  // Neutral success — no discrepancy info shown
-  if (success) {
-    return (
-      <div className="flex flex-col items-center justify-center p-8 text-center min-h-[60vh]">
-        <div className="rounded-full bg-success/10 p-4 mb-4">
-          <CheckCircle2 className="h-12 w-12 text-success" />
-        </div>
-        <h2 className="text-xl font-bold mb-1">Casting Record Saved</h2>
-        <p className="text-muted-foreground mb-6">
-          {casting?.casting_code} — record saved successfully
-        </p>
-        <div className="flex gap-3">
-          <Button variant="outline" onClick={() => navigate('/employee')}>Back to Metals</Button>
-          <Button onClick={() => navigate('/employee/pending')}>View Pending</Button>
-        </div>
-      </div>
-    );
-  }
 
   if (!casting) {
     return <div className="p-4"><div className="h-48 bg-muted rounded-lg animate-pulse" /></div>;
