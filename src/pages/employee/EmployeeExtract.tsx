@@ -137,7 +137,7 @@ export default function EmployeeExtract() {
         </div>
         <h2 className="text-lg font-bold mb-3">{metal.metal_name}</h2>
         <div className="flex items-baseline gap-1">
-          <span className="font-mono text-3xl font-bold">{available.toFixed(1)}</span>
+          <span className="font-mono text-3xl font-bold">{available.toFixed(2)}</span>
           <span className="text-sm text-muted-foreground">grams available</span>
         </div>
       </div>

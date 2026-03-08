@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 const FAMILY_ORDER = ['Gold', 'Platinum', 'Palladium', 'Silver'];
-const COLOR_ORDER = ['Yellow', 'White', 'Rose', 'Red'];
+const COLOR_ORDER = ['Yellow', 'White', 'Rose'];
 
 interface MetalType {
   id: string;
@@ -36,10 +36,16 @@ function getColorLabel(color: string) {
   switch (color.toLowerCase()) {
     case 'yellow': return 'Yellow Gold';
     case 'white': return 'White Gold';
-    case 'rose': return 'Rose Gold';
-    case 'red': return 'Russian Red Gold';
+    case 'rose':
+    case 'red': return 'Rose Gold';
     default: return color + ' Gold';
   }
+}
+
+function normalizeColorGroup(color: string): string {
+  // Group Red and Rose together under Rose
+  if (color === 'Red') return 'Rose';
+  return color;
 }
 
 function getShortName(metalName: string, colorGroup: string, metalFamily: string): string {
@@ -196,7 +202,7 @@ function buildHierarchy(metals: MetalType[]): FamilyGroup[] {
     if (family === 'Gold') {
       const colorMap: Record<string, MetalType[]> = {};
       for (const m of familyMetals) {
-        const c = m.color_group || 'Other';
+        const c = normalizeColorGroup(m.color_group || 'Other');
         if (!colorMap[c]) colorMap[c] = [];
         colorMap[c].push(m);
       }
