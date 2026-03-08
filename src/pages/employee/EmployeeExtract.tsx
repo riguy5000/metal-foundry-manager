@@ -145,7 +145,18 @@ export default function EmployeeExtract() {
       {/* Form — no flask code input, auto-generated on save */}
       <div className="space-y-5">
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Grams to Extract</Label>
+          <div className="flex gap-2">
+            <Label className="text-sm font-medium flex-1">Grams to Extract</Label>
+            {available > 0 && (
+              <button
+                type="button"
+                onClick={() => setGrams(available.toString())}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Take All ({available.toFixed(2)}g)
+              </button>
+            )}
+          </div>
           <Input
             type="number" step="0.01" min="0.01"
             value={grams} onChange={(e) => setGrams(e.target.value)}
