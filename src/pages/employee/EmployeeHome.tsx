@@ -36,10 +36,16 @@ function getColorLabel(color: string) {
   switch (color.toLowerCase()) {
     case 'yellow': return 'Yellow Gold';
     case 'white': return 'White Gold';
-    case 'rose': return 'Rose Gold';
-    case 'red': return 'Russian Red Gold';
+    case 'rose':
+    case 'red': return 'Rose Gold';
     default: return color + ' Gold';
   }
+}
+
+function normalizeColorGroup(color: string): string {
+  // Group Red and Rose together under Rose
+  if (color === 'Red') return 'Rose';
+  return color;
 }
 
 function getShortName(metalName: string, colorGroup: string, metalFamily: string): string {
