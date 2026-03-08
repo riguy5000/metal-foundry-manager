@@ -7,7 +7,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
 const FAMILY_ORDER = ['Gold', 'Platinum', 'Palladium', 'Silver'];
-const COLOR_ORDER = ['Yellow', 'White', 'Rose', 'Red'];
+const COLOR_ORDER = ['Yellow', 'White', 'Rose'];
 
 interface MetalType {
   id: string;
