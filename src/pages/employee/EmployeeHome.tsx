@@ -46,7 +46,7 @@ function getShortName(metalName: string, colorGroup: string, metalFamily: string
   if (metalFamily !== 'Gold') return metalName;
   // For gold: show "10K Yellow", "14K Red", etc.
   const karat = metalName.match(/^\d+K/)?.[0] ?? '';
-  const color = colorGroup === 'Red' ? 'Red' : colorGroup;
+  const color = (colorGroup === 'Red' || colorGroup === 'Rose') ? 'Red' : colorGroup;
   return `${karat} ${color}`;
 }
 
