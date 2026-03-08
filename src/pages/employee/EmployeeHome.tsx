@@ -158,7 +158,7 @@ function MetalCard({ metal, onTap }: { metal: MetalType; onTap: () => void }) {
       <div className="mt-auto w-full">
         <div className="flex items-baseline gap-0.5">
           <span className="font-mono text-2xl font-bold leading-none text-foreground">
-            {Number(metal.current_stock_grams).toFixed(1)}
+            {Number(metal.current_stock_grams).toFixed(2)}
           </span>
           <span className="text-xs text-muted-foreground ml-0.5">g</span>
         </div>
