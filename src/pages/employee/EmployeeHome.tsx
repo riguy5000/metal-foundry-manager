@@ -202,7 +202,7 @@ function buildHierarchy(metals: MetalType[]): FamilyGroup[] {
     if (family === 'Gold') {
       const colorMap: Record<string, MetalType[]> = {};
       for (const m of familyMetals) {
-        const c = m.color_group || 'Other';
+        const c = normalizeColorGroup(m.color_group || 'Other');
         if (!colorMap[c]) colorMap[c] = [];
         colorMap[c].push(m);
       }
