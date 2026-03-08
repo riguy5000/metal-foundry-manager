@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
 import { Clock, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow, differenceInHours } from 'date-fns';
+import { formatDistanceToNow, differenceInHours, format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
 export default function EmployeePending() {
@@ -51,12 +51,14 @@ export default function EmployeePending() {
         </div>
       ) : (
         <div className="space-y-4">
-          {castings?.map((c) => {
+          {castings?.map((c, idx) => {
             const mt = c.metal_types as any;
             const cardClass = getMetalCardClass(mt?.color_group ?? '', mt?.metal_family ?? '');
             const emoji = getMetalEmoji(mt?.color_group ?? '', mt?.metal_family ?? '');
             const hoursAgo = differenceInHours(new Date(), new Date(c.extracted_at));
             const isAging = hoursAgo >= 2;
+            // Number from oldest (1) to newest
+            const itemNumber = castings!.length - idx;
 
             return (
               <button
@@ -67,6 +69,10 @@ export default function EmployeePending() {
                   cardClass
                 )}
               >
+                {/* Sequence number */}
+                <div className="flex items-center justify-center h-9 w-9 rounded-full bg-foreground/10 text-foreground font-bold text-sm mr-4 shrink-0">
+                  #{itemNumber}
+                </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="text-lg">{emoji}</span>
@@ -86,8 +92,10 @@ export default function EmployeePending() {
                   <div className="text-sm text-muted-foreground mt-1">
                     <span>g extracted</span>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-1">
-                    {formatDistanceToNow(new Date(c.extracted_at), { addSuffix: true })}
+                  <div className="text-xs text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span>{formatDistanceToNow(new Date(c.extracted_at), { addSuffix: true })}</span>
+                    <span className="text-border">•</span>
+                    <span className="font-mono">{format(new Date(c.extracted_at), 'MMM d, yyyy · h:mm a')}</span>
                   </div>
                 </div>
                 <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
