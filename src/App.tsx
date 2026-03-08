@@ -17,6 +17,7 @@ import SettingsPage from "./pages/SettingsPage";
 import AdminWarnings from "./pages/AdminWarnings";
 import AdminStatistics from "./pages/AdminStatistics";
 import AdminUsers from "./pages/AdminUsers";
+import AdminLogs from "./pages/AdminLogs";
 import EmployeeHome from "./pages/employee/EmployeeHome";
 import EmployeeExtract from "./pages/employee/EmployeeExtract";
 import EmployeePending from "./pages/employee/EmployeePending";
