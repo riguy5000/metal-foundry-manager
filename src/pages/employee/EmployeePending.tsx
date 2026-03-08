@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
 import { Clock, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDistanceToNow, differenceInHours } from 'date-fns';
+import { formatDistanceToNow, differenceInHours, format } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
 export default function EmployeePending() {
