@@ -250,7 +250,7 @@ export default function EmployeeComplete() {
         <h3 className="text-base font-semibold text-foreground">Final Completion</h3>
 
         <div className="space-y-2">
-          <Label className="text-base font-semibold">Finished Jewelry (g)</Label>
+          <Label className="text-base font-semibold flex items-center gap-2"><Gem className="h-5 w-5 text-primary" /> Finished Jewelry (g)</Label>
           <Input
             type="number" step="0.01" min="0"
             value={jewelryGrams} onChange={(e) => setJewelryGrams(e.target.value)}
