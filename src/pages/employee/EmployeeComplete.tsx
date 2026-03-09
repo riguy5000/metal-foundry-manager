@@ -260,7 +260,7 @@ export default function EmployeeComplete() {
         </div>
 
         <div className="space-y-2">
-          <Label className="text-base font-semibold">Returned Sprue / Button (g)</Label>
+          <Label className="text-base font-semibold flex items-center gap-2"><CircleDot className="h-5 w-5 text-amber-600 dark:text-amber-400" /> Returned Sprue / Button (g)</Label>
           <Input
             type="number" step="0.01" min="0"
             value={returnedGrams} onChange={(e) => setReturnedGrams(e.target.value)}
