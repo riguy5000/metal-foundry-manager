@@ -215,48 +215,21 @@ export default function EmployeeComplete() {
 
       {/* Section B — Sprue Transfer for Next Casting */}
       {!isFinalized && (
-        <div className="rounded-xl border-2 border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 p-5 mb-6">
-          <div className="flex items-center gap-2 mb-1">
-            <ArrowRightLeft className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-            <h3 className="text-base font-semibold text-amber-800 dark:text-amber-300">
-              Extract Sprue for Next Casting
-            </h3>
+        <div className="rounded-lg border border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3 mb-5">
+          <div className="flex items-center gap-1.5 mb-2">
+            <ArrowRightLeft className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Sprue Transfer</h3>
+            <span className="ml-auto text-[10px] text-muted-foreground font-mono">
+              {alreadyTransferred.toFixed(1)}g sent · {availableBalance.toFixed(1)}g avail
+            </span>
           </div>
-          <p className="text-xs text-amber-700/70 dark:text-amber-400/60 mb-4">
-            Use this only when clean sprue from this open casting is being reused for the next casting before final cleanup.
-          </p>
-
-          {/* Transfer info */}
-          <div className="grid grid-cols-3 gap-2 mb-4 text-center">
-            <div className="rounded-lg bg-background/80 p-2">
-              <div className="font-mono text-lg font-bold">{extracted.toFixed(2)}</div>
-              <div className="text-[10px] text-muted-foreground">Extracted</div>
-            </div>
-            <div className="rounded-lg bg-background/80 p-2">
-              <div className="font-mono text-lg font-bold">{alreadyTransferred.toFixed(2)}</div>
-              <div className="text-[10px] text-muted-foreground">Transferred</div>
-            </div>
-            <div className="rounded-lg bg-background/80 p-2">
-              <div className="font-mono text-lg font-bold">{availableBalance.toFixed(2)}</div>
-              <div className="text-[10px] text-muted-foreground">Available</div>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-amber-800 dark:text-amber-300">Grams to Transfer</Label>
+          <div className="flex items-end gap-2">
+            <div className="flex-1 space-y-1">
+              <Label className="text-xs text-amber-800 dark:text-amber-300">Grams</Label>
               <Input
                 type="number" step="0.01" min="0"
                 value={transferGrams} onChange={(e) => setTransferGrams(e.target.value)}
-                placeholder="0.00" className="h-12 text-xl font-mono text-center" inputMode="decimal"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-amber-800 dark:text-amber-300">Note <span className="font-normal text-muted-foreground">(optional)</span></Label>
-              <Textarea
-                value={transferNote} onChange={(e) => setTransferNote(e.target.value)}
-                placeholder="e.g. Reusing clean sprue for next batch"
-                className="min-h-[60px] text-sm"
+                placeholder="0.00" className="h-10 text-base font-mono text-center" inputMode="decimal"
               />
             </div>
             <Button
@@ -264,9 +237,9 @@ export default function EmployeeComplete() {
               variant="outline"
               onClick={() => transferMutation.mutate()}
               disabled={transferMutation.isPending || !transferGrams || parseFloat(transferGrams) <= 0 || parseFloat(transferGrams) > availableBalance}
-              className="w-full h-11 font-semibold border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+              className="h-10 px-4 text-sm font-semibold border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
             >
-              {transferMutation.isPending ? 'Transferring...' : 'Apply Transfer'}
+              {transferMutation.isPending ? '...' : 'Transfer'}
             </Button>
           </div>
         </div>
