@@ -12,6 +12,7 @@ const typeLabels: Record<string, string> = {
   extract_for_casting: 'Extract',
   return_from_casting: 'Return',
   manual_adjustment: 'Adjustment',
+  sprue_transfer_from_open_casting: 'Sprue Transfer',
 };
 
 const typeColors: Record<string, string> = {
@@ -20,6 +21,7 @@ const typeColors: Record<string, string> = {
   extract_for_casting: 'bg-amber-100 text-amber-800 border-amber-200',
   return_from_casting: 'bg-purple-100 text-purple-800 border-purple-200',
   manual_adjustment: 'bg-gray-100 text-gray-800 border-gray-200',
+  sprue_transfer_from_open_casting: 'bg-orange-100 text-orange-800 border-orange-200',
 };
 
 export default function AdminLogs() {

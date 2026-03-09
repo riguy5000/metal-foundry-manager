@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft } from 'lucide-react';
 import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
 import { cn } from '@/lib/utils';
 
@@ -20,8 +20,10 @@ export default function EmployeeComplete() {
   const [returnedGrams, setReturnedGrams] = useState('');
   const [jewelryGrams, setJewelryGrams] = useState('');
   const [abnormalityNote, setAbnormalityNote] = useState('');
+  const [transferGrams, setTransferGrams] = useState('');
+  const [transferNote, setTransferNote] = useState('');
 
-  const { data: casting } = useQuery({
+  const { data: casting, refetch: refetchCasting } = useQuery({
     queryKey: ['casting_record', castingId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -46,15 +48,80 @@ export default function EmployeeComplete() {
   const returned = parseFloat(returnedGrams) || 0;
   const jewelry = parseFloat(jewelryGrams) || 0;
   const extracted = casting ? Number(casting.extracted_grams) : 0;
+  const alreadyTransferred = casting ? Number((casting as any).sprue_transferred_to_next_casting_grams ?? 0) : 0;
+
+  // Available balance for transfer (before finalization fields are filled)
+  const availableBalance = extracted - alreadyTransferred - returned - jewelry;
+
+  // Sprue transfer mutation
+  const transferMutation = useMutation({
+    mutationFn: async () => {
+      if (!casting || !user) throw new Error('Missing data');
+      const amount = parseFloat(transferGrams);
+      if (!amount || amount <= 0) throw new Error('Enter a valid amount');
+
+      const currentAvailable = extracted - alreadyTransferred - (parseFloat(returnedGrams) || 0) - (parseFloat(jewelryGrams) || 0);
+      if (amount > currentAvailable) throw new Error(`Cannot transfer more than ${currentAvailable.toFixed(2)}g available`);
+
+      const mt = casting.metal_types as any;
+      const newTransferTotal = alreadyTransferred + amount;
+
+      // Update casting record
+      const { error } = await supabase.from('casting_records').update({
+        sprue_transferred_to_next_casting_grams: newTransferTotal,
+        has_sprue_transfer: true,
+        last_sprue_transfer_at: new Date().toISOString(),
+        sprue_transfer_notes: transferNote || null,
+        remaining_unfinalized_balance_grams: extracted - newTransferTotal,
+        status: 'open_with_sprue_transfer' as any,
+      }).eq('id', casting.id);
+      if (error) throw error;
+
+      // Add transferred sprue back to inventory
+      await supabase.from('metal_types').update({
+        current_stock_grams: Number(mt.current_stock_grams) + amount,
+      }).eq('id', mt.id);
+
+      // Create inventory transaction
+      await supabase.from('inventory_transactions').insert({
+        metal_type_id: mt.id,
+        grams: amount,
+        transaction_type: 'sprue_transfer_from_open_casting' as any,
+        entered_by_user_id: user.id,
+        notes: `Sprue transfer from open casting ${casting.casting_code}${transferNote ? ` — ${transferNote}` : ''}`,
+        related_casting_id: casting.id,
+      });
+
+      // Audit log
+      await supabase.from('audit_logs').insert({
+        action_type: 'sprue_transfer',
+        entity_type: 'casting_record',
+        entity_id: casting.id,
+        user_id: user.id,
+        before_json: { sprue_transferred: alreadyTransferred },
+        after_json: { sprue_transferred: newTransferTotal, transfer_amount: amount },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['metal_types'] });
+      queryClient.invalidateQueries({ queryKey: ['casting_record', castingId] });
+      queryClient.invalidateQueries({ queryKey: ['my_pending'] });
+      setTransferGrams('');
+      setTransferNote('');
+      refetchCasting();
+      toast.success('Sprue transfer recorded. Transferred amount added back to available stock.');
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const completeMutation = useMutation({
     mutationFn: async () => {
       if (!casting || !user) throw new Error('Missing data');
-      const totalAccounted = returned + jewelry;
+      const totalAccounted = returned + jewelry + alreadyTransferred;
       const difference = extracted - totalAccounted;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
-      const discrepancyPercent = extracted > 0 ? (difference / extracted) * 100 : 0;
-      const flag = Math.abs(discrepancyPercent) > Number(tolerance);
+      const discrepancyPercent = extracted > 0 ? (Math.abs(difference) / extracted) * 100 : 0;
+      const flag = discrepancyPercent > Number(tolerance);
 
       const { error } = await supabase.from('casting_records').update({
         returned_button_grams: returned,
@@ -63,10 +130,11 @@ export default function EmployeeComplete() {
         discrepancy_percent: discrepancyPercent,
         tolerance_percent_used: Number(tolerance),
         discrepancy_flag: flag,
-        status: flag ? 'flagged' : 'completed',
+        status: (flag ? 'flagged' : 'completed') as any,
         completed_by_user_id: user.id,
         completed_at: new Date().toISOString(),
         abnormality_note: abnormalityNote || null,
+        remaining_unfinalized_balance_grams: 0,
       }).eq('id', casting.id);
       if (error) throw error;
 
@@ -84,6 +152,18 @@ export default function EmployeeComplete() {
           related_casting_id: casting.id,
         });
       }
+
+      // Audit log for completion with transfer
+      if (alreadyTransferred > 0) {
+        await supabase.from('audit_logs').insert({
+          action_type: 'casting_completed_with_transfer',
+          entity_type: 'casting_record',
+          entity_id: casting.id,
+          user_id: user.id,
+          before_json: { sprue_transferred: alreadyTransferred, extracted: extracted },
+          after_json: { finished_jewelry: jewelry, returned_button: returned, discrepancy: difference },
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['metal_types'] });
@@ -95,7 +175,6 @@ export default function EmployeeComplete() {
     onError: (e: any) => toast.error(e.message),
   });
 
-
   if (!casting) {
     return <div className="p-4"><div className="h-48 bg-muted rounded-lg animate-pulse" /></div>;
   }
@@ -103,6 +182,7 @@ export default function EmployeeComplete() {
   const mt = casting.metal_types as any;
   const cardClass = getMetalCardClass(mt?.color_group ?? '', mt?.metal_family ?? '');
   const emoji = getMetalEmoji(mt?.color_group ?? '', mt?.metal_family ?? '');
+  const isFinalized = casting.status === 'completed' || casting.status === 'flagged';
 
   return (
     <div className="p-4 max-w-lg mx-auto">
@@ -125,10 +205,77 @@ export default function EmployeeComplete() {
           {extracted.toFixed(2)}
         </div>
         <div className="text-sm text-muted-foreground mt-1">g extracted</div>
+        {alreadyTransferred > 0 && (
+          <div className="mt-2 text-sm font-medium text-foreground/80">
+            <ArrowRightLeft className="h-3.5 w-3.5 inline mr-1" />
+            {alreadyTransferred.toFixed(2)}g already transferred to next casting
+          </div>
+        )}
       </div>
 
-      {/* Simple form — no reconciliation preview, no discrepancy info */}
+      {/* Section B — Sprue Transfer for Next Casting */}
+      {!isFinalized && (
+        <div className="rounded-xl border-2 border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 p-5 mb-6">
+          <div className="flex items-center gap-2 mb-1">
+            <ArrowRightLeft className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            <h3 className="text-base font-semibold text-amber-800 dark:text-amber-300">
+              Extract Sprue for Next Casting
+            </h3>
+          </div>
+          <p className="text-xs text-amber-700/70 dark:text-amber-400/60 mb-4">
+            Use this only when clean sprue from this open casting is being reused for the next casting before final cleanup.
+          </p>
+
+          {/* Transfer info */}
+          <div className="grid grid-cols-3 gap-2 mb-4 text-center">
+            <div className="rounded-lg bg-background/80 p-2">
+              <div className="font-mono text-lg font-bold">{extracted.toFixed(2)}</div>
+              <div className="text-[10px] text-muted-foreground">Extracted</div>
+            </div>
+            <div className="rounded-lg bg-background/80 p-2">
+              <div className="font-mono text-lg font-bold">{alreadyTransferred.toFixed(2)}</div>
+              <div className="text-[10px] text-muted-foreground">Transferred</div>
+            </div>
+            <div className="rounded-lg bg-background/80 p-2">
+              <div className="font-mono text-lg font-bold">{availableBalance.toFixed(2)}</div>
+              <div className="text-[10px] text-muted-foreground">Available</div>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-amber-800 dark:text-amber-300">Grams to Transfer</Label>
+              <Input
+                type="number" step="0.01" min="0"
+                value={transferGrams} onChange={(e) => setTransferGrams(e.target.value)}
+                placeholder="0.00" className="h-12 text-xl font-mono text-center" inputMode="decimal"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium text-amber-800 dark:text-amber-300">Note <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Textarea
+                value={transferNote} onChange={(e) => setTransferNote(e.target.value)}
+                placeholder="e.g. Reusing clean sprue for next batch"
+                className="min-h-[60px] text-sm"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => transferMutation.mutate()}
+              disabled={transferMutation.isPending || !transferGrams || parseFloat(transferGrams) <= 0 || parseFloat(transferGrams) > availableBalance}
+              className="w-full h-11 font-semibold border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+            >
+              {transferMutation.isPending ? 'Transferring...' : 'Apply Transfer'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Section A — Final Completion */}
       <div className="space-y-5">
+        <h3 className="text-base font-semibold text-foreground">Final Completion</h3>
+
         <div className="space-y-2">
           <Label className="text-base font-semibold">Finished Jewelry (g)</Label>
           <Input
@@ -159,7 +306,7 @@ export default function EmployeeComplete() {
 
         <Button
           onClick={() => completeMutation.mutate()}
-          disabled={completeMutation.isPending || (returned <= 0 && jewelry <= 0)}
+          disabled={completeMutation.isPending || (returned <= 0 && jewelry <= 0) || isFinalized}
           className="w-full h-14 text-base font-semibold" size="lg"
         >
           {completeMutation.isPending ? 'Saving...' : 'Complete Casting'}
