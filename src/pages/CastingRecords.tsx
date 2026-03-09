@@ -21,6 +21,7 @@ const statusColor = (status: string) => {
   switch (status) {
     case 'completed': return 'bg-success/10 text-success border-success/20';
     case 'flagged': return 'bg-destructive/10 text-destructive border-destructive/20';
+    case 'open_with_sprue_transfer': return 'bg-amber-100/50 text-amber-800 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300';
     default: return 'bg-muted text-foreground';
   }
 };
@@ -29,6 +30,7 @@ const statusLabel = (status: string) => {
   switch (status) {
     case 'completed': return 'Completed';
     case 'flagged': return 'Flagged';
+    case 'open_with_sprue_transfer': return 'Partial Transfer';
     default: return 'Pending';
   }
 };
@@ -88,6 +90,7 @@ export default function CastingRecords() {
         if (filterStatus === 'pending' && c.status !== 'extracted_pending_completion') return false;
         if (filterStatus === 'completed' && c.status !== 'completed') return false;
         if (filterStatus === 'flagged' && c.status !== 'flagged') return false;
+        if (filterStatus === 'transfer' && c.status !== 'open_with_sprue_transfer') return false;
       }
       if (discrepancyOnly && !c.discrepancy_flag) return false;
       return true;
@@ -99,11 +102,12 @@ export default function CastingRecords() {
       const casting = selectedCasting;
       const returnedButton = values.returnedButtonGrams;
       const finishedJewelry = values.finishedJewelryGrams;
-      const totalAccounted = returnedButton + finishedJewelry;
+      const sprueTrans = Number((casting as any).sprue_transferred_to_next_casting_grams ?? 0);
+      const totalAccounted = returnedButton + finishedJewelry + sprueTrans;
       const discrepancyGrams = Number(casting.extracted_grams) - totalAccounted;
-      const discrepancyPercent = (discrepancyGrams / Number(casting.extracted_grams)) * 100;
+      const discrepancyPercent = (Math.abs(discrepancyGrams) / Number(casting.extracted_grams)) * 100;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
-      const flag = Math.abs(discrepancyPercent) > tolerance;
+      const flag = discrepancyPercent > tolerance;
 
       const { error } = await supabase
         .from('casting_records')
@@ -114,10 +118,11 @@ export default function CastingRecords() {
           discrepancy_percent: discrepancyPercent,
           tolerance_percent_used: tolerance,
           discrepancy_flag: flag,
-          status: flag ? 'flagged' : 'completed',
+          status: (flag ? 'flagged' : 'completed') as any,
           completed_by_user_id: user!.id,
           completed_at: new Date().toISOString(),
           abnormality_note: values.abnormalityNote || null,
+          remaining_unfinalized_balance_grams: 0,
         })
         .eq('id', casting.id);
       if (error) throw error;
@@ -154,11 +159,12 @@ export default function CastingRecords() {
       const returnedButton = values.returnedButtonGrams;
       const finishedJewelry = values.finishedJewelryGrams;
       const extracted = Number(casting.extracted_grams);
-      const totalAccounted = returnedButton + finishedJewelry;
+      const sprueTrans = Number((casting as any).sprue_transferred_to_next_casting_grams ?? 0);
+      const totalAccounted = returnedButton + finishedJewelry + sprueTrans;
       const discrepancyGrams = extracted - totalAccounted;
-      const discrepancyPercent = (discrepancyGrams / extracted) * 100;
+      const discrepancyPercent = (Math.abs(discrepancyGrams) / extracted) * 100;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
-      const flag = Math.abs(discrepancyPercent) > tolerance;
+      const flag = discrepancyPercent > tolerance;
 
       // Calculate inventory delta: difference between new and old returned button
       const oldReturned = Number(casting.returned_button_grams) || 0;
@@ -173,7 +179,7 @@ export default function CastingRecords() {
           discrepancy_percent: discrepancyPercent,
           tolerance_percent_used: tolerance,
           discrepancy_flag: flag,
-          status: flag ? 'flagged' : 'completed',
+          status: (flag ? 'flagged' : 'completed') as any,
           abnormality_note: values.abnormalityNote || null,
         })
         .eq('id', casting.id);
@@ -236,10 +242,11 @@ export default function CastingRecords() {
             <div className="space-y-1">
               <Label className="text-xs text-muted-foreground">Status</Label>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="transfer">Partial Transfer</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                   <SelectItem value="flagged">Flagged</SelectItem>
                 </SelectContent>
@@ -268,6 +275,7 @@ export default function CastingRecords() {
                 <TableHead>Code</TableHead>
                 <TableHead>Metal</TableHead>
                 <TableHead className="text-right">Extracted</TableHead>
+                <TableHead className="text-right">Transferred</TableHead>
                 <TableHead className="text-right">Jewelry</TableHead>
                 <TableHead className="text-right">Returned</TableHead>
                 <TableHead className="text-right">Disc. (g)</TableHead>
@@ -281,9 +289,11 @@ export default function CastingRecords() {
               {filteredCastings.map((c) => {
                 const profile = c.profiles as any;
                 const isCompleted = c.status === 'completed' || c.status === 'flagged';
+                const isPending = c.status === 'extracted_pending_completion' || c.status === 'open_with_sprue_transfer';
+                const sprueTransferred = Number((c as any).sprue_transferred_to_next_casting_grams ?? 0);
                 return (
-                  <TableRow key={c.id} className={cn(c.status === 'extracted_pending_completion' && 'cursor-pointer hover:bg-muted/50')} onClick={() => {
-                    if (c.status === 'extracted_pending_completion') {
+                  <TableRow key={c.id} className={cn(isPending && 'cursor-pointer hover:bg-muted/50')} onClick={() => {
+                    if (isPending) {
                       setSelectedCasting(c);
                       setCompleteOpen(true);
                     }
@@ -292,6 +302,11 @@ export default function CastingRecords() {
                     <TableCell className="font-mono text-sm font-medium">{c.casting_code}</TableCell>
                     <TableCell className="text-sm">{(c.metal_types as any)?.metal_name}</TableCell>
                     <TableCell className="text-right font-mono text-sm font-bold">{Number(c.extracted_grams).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {sprueTransferred > 0 ? (
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">{sprueTransferred.toFixed(2)}</span>
+                      ) : '—'}
+                    </TableCell>
                     <TableCell className="text-right font-mono text-sm">{c.finished_jewelry_grams != null ? Number(c.finished_jewelry_grams).toFixed(2) : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{c.returned_button_grams != null ? Number(c.returned_button_grams).toFixed(2) : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">
@@ -333,7 +348,7 @@ export default function CastingRecords() {
               })}
               {filteredCastings.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">No casting records</TableCell>
+                  <TableCell colSpan={12} className="text-center text-muted-foreground py-8">No casting records</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -380,13 +395,17 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
   const returned = parseFloat(returnedButtonGrams) || 0;
   const jewelry = parseFloat(finishedJewelryGrams) || 0;
   const extracted = Number(casting.extracted_grams);
-  const discrepancy = extracted - (returned + jewelry);
-  const discrepancyPct = extracted > 0 ? (discrepancy / extracted) * 100 : 0;
+  const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
+  const discrepancy = extracted - sprueTrans - (returned + jewelry);
+  const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ returnedButtonGrams: returned, finishedJewelryGrams: jewelry, abnormalityNote }); }} className="space-y-4">
-      <div className="rounded-lg bg-muted p-3 text-sm">
+      <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
         <p>Extracted: <strong>{extracted.toFixed(2)}g</strong></p>
+        {sprueTrans > 0 && (
+          <p className="text-amber-700 dark:text-amber-400">Sprue transferred: <strong>{sprueTrans.toFixed(2)}g</strong></p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -399,9 +418,9 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
         </div>
       </div>
       {(returned > 0 || jewelry > 0) && (
-        <div className={cn('rounded-lg p-3 text-sm', Math.abs(discrepancyPct) > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
+        <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
           Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
-          {Math.abs(discrepancyPct) > 2 && ' ⚠️ Exceeds tolerance'}
+          {discrepancyPct > 2 && ' ⚠️ Exceeds tolerance'}
         </div>
       )}
       <div className="space-y-2">
@@ -423,13 +442,17 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
   const returned = parseFloat(returnedButtonGrams) || 0;
   const jewelry = parseFloat(finishedJewelryGrams) || 0;
   const extracted = Number(casting.extracted_grams);
-  const discrepancy = extracted - (returned + jewelry);
-  const discrepancyPct = extracted > 0 ? (discrepancy / extracted) * 100 : 0;
+  const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
+  const discrepancy = extracted - sprueTrans - (returned + jewelry);
+  const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ returnedButtonGrams: returned, finishedJewelryGrams: jewelry, abnormalityNote }); }} className="space-y-4">
       <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
         <p>Extracted: <strong>{extracted.toFixed(2)}g</strong></p>
+        {sprueTrans > 0 && (
+          <p className="text-amber-700 dark:text-amber-400">Sprue transferred: <strong>{sprueTrans.toFixed(2)}g</strong></p>
+        )}
         <p className="text-xs text-muted-foreground">
           Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g
         </p>
@@ -444,9 +467,9 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
           <Input type="number" step="0.01" min="0" value={finishedJewelryGrams} onChange={(e) => setFinishedJewelryGrams(e.target.value)} required />
         </div>
       </div>
-      <div className={cn('rounded-lg p-3 text-sm', Math.abs(discrepancyPct) > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
+      <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
         Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
-        {Math.abs(discrepancyPct) > 2 && ' ⚠️ Exceeds tolerance'}
+        {discrepancyPct > 2 && ' ⚠️ Exceeds tolerance'}
       </div>
       <div className="space-y-2">
         <Label>Abnormality Note</Label>

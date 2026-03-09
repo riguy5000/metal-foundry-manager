@@ -61,11 +61,16 @@ export type Database = {
           extracted_by_user_id: string
           extracted_grams: number
           finished_jewelry_grams: number | null
+          has_sprue_transfer: boolean
           id: string
           job_reference: string | null
+          last_sprue_transfer_at: string | null
           metal_type_id: string
           notes: string | null
+          remaining_unfinalized_balance_grams: number | null
           returned_button_grams: number | null
+          sprue_transfer_notes: string | null
+          sprue_transferred_to_next_casting_grams: number
           status: Database["public"]["Enums"]["casting_status"]
           tolerance_percent_used: number | null
           updated_at: string
@@ -83,11 +88,16 @@ export type Database = {
           extracted_by_user_id: string
           extracted_grams: number
           finished_jewelry_grams?: number | null
+          has_sprue_transfer?: boolean
           id?: string
           job_reference?: string | null
+          last_sprue_transfer_at?: string | null
           metal_type_id: string
           notes?: string | null
+          remaining_unfinalized_balance_grams?: number | null
           returned_button_grams?: number | null
+          sprue_transfer_notes?: string | null
+          sprue_transferred_to_next_casting_grams?: number
           status?: Database["public"]["Enums"]["casting_status"]
           tolerance_percent_used?: number | null
           updated_at?: string
@@ -105,11 +115,16 @@ export type Database = {
           extracted_by_user_id?: string
           extracted_grams?: number
           finished_jewelry_grams?: number | null
+          has_sprue_transfer?: boolean
           id?: string
           job_reference?: string | null
+          last_sprue_transfer_at?: string | null
           metal_type_id?: string
           notes?: string | null
+          remaining_unfinalized_balance_grams?: number | null
           returned_button_grams?: number | null
+          sprue_transfer_notes?: string | null
+          sprue_transferred_to_next_casting_grams?: number
           status?: Database["public"]["Enums"]["casting_status"]
           tolerance_percent_used?: number | null
           updated_at?: string
@@ -353,13 +368,18 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "employee"
-      casting_status: "extracted_pending_completion" | "completed" | "flagged"
+      casting_status:
+        | "extracted_pending_completion"
+        | "completed"
+        | "flagged"
+        | "open_with_sprue_transfer"
       transaction_type:
         | "initial_stock"
         | "add_stock"
         | "extract_for_casting"
         | "return_from_casting"
         | "manual_adjustment"
+        | "sprue_transfer_from_open_casting"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -488,13 +508,19 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "employee"],
-      casting_status: ["extracted_pending_completion", "completed", "flagged"],
+      casting_status: [
+        "extracted_pending_completion",
+        "completed",
+        "flagged",
+        "open_with_sprue_transfer",
+      ],
       transaction_type: [
         "initial_stock",
         "add_stock",
         "extract_for_casting",
         "return_from_casting",
         "manual_adjustment",
+        "sprue_transfer_from_open_casting",
       ],
     },
   },

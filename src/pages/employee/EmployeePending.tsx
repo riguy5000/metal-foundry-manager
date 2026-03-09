@@ -16,7 +16,7 @@ export default function EmployeePending() {
       const { data, error } = await supabase
         .from('casting_records')
         .select('*, metal_types(metal_name, karat_label, color_group, metal_family)')
-        .eq('status', 'extracted_pending_completion')
+        .in('status', ['extracted_pending_completion', 'open_with_sprue_transfer'])
         .order('extracted_at', { ascending: false });
       if (error) throw error;
       return data;
