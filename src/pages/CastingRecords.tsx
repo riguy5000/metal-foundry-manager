@@ -507,7 +507,7 @@ export default function CastingRecords() {
                     <TableCell className="text-sm text-muted-foreground">{profile?.full_name ?? '—'}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {isCompleted && (
+                        {(isCompleted || isPending) && (
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => {
                             e.stopPropagation();
                             setSelectedCasting(c);
