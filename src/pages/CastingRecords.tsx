@@ -16,7 +16,8 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Plus } from 'lucide-react';
+import { generateFlaskCode } from '@/lib/metalUtils';
 
 const statusColor = (status: string) => {
   switch (status) {
