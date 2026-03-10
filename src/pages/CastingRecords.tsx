@@ -274,12 +274,14 @@ export default function CastingRecords() {
 
       const sourceFromInventory = Number((casting as any).source_from_inventory_grams ?? casting.extracted_grams ?? 0);
       const returnedButton = Number(casting.returned_button_grams ?? 0);
+      const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
       const isCompleted = casting.status === 'completed' || casting.status === 'flagged';
 
       // Reverse inventory effects:
       // Extraction took source_from_inventory_grams from stock → add back
       // If completed, returned_button_grams was added to stock → subtract back
-      const stockAdjustment = sourceFromInventory - (isCompleted ? returnedButton : 0);
+      // sprue_transferred was already added back to inventory → subtract to avoid double-counting
+      const stockAdjustment = sourceFromInventory - (isCompleted ? returnedButton : 0) - sprueTrans;
 
       if (stockAdjustment !== 0) {
         const metal = metals?.find((m) => m.id === casting.metal_type_id);
