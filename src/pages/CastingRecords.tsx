@@ -582,6 +582,13 @@ export default function CastingRecords() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Create new casting dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>New Casting</DialogTitle><DialogDescription>Create a casting record and deduct from inventory.</DialogDescription></DialogHeader>
+          <CreateCastingForm metals={metals ?? []} onSubmit={(v) => createCasting.mutate(v)} loading={createCasting.isPending} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
