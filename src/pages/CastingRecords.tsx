@@ -16,7 +16,8 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Plus } from 'lucide-react';
+import { generateFlaskCode } from '@/lib/metalUtils';
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -42,6 +43,7 @@ export default function CastingRecords() {
   const [completeOpen, setCompleteOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedCasting, setSelectedCasting] = useState<any>(null);
 
   const [fromDate, setFromDate] = useState('');
@@ -313,9 +315,87 @@ export default function CastingRecords() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const createCasting = useMutation({
+    mutationFn: async (values: { metalId: string; totalGrams: number; sourceOpenCastingId?: string; openCastingGrams: number; jobReference: string; notes: string }) => {
+      if (!user) throw new Error('Not authenticated');
+      const metal = metals?.find(m => m.id === values.metalId);
+      if (!metal) throw new Error('Metal not found');
+
+      const fromOpenCasting = values.openCastingGrams;
+      const fromInventory = Math.round((values.totalGrams - fromOpenCasting) * 100) / 100;
+      const available = Number(metal.current_stock_grams);
+
+      if (fromInventory > available) throw new Error('Insufficient inventory stock');
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('casting_records')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today.toISOString());
+      const flaskCode = generateFlaskCode((count ?? 0) + 1);
+
+      const { error: castError } = await supabase.from('casting_records').insert({
+        casting_code: flaskCode,
+        metal_type_id: metal.id,
+        extracted_grams: values.totalGrams,
+        extracted_by_user_id: user.id,
+        job_reference: values.jobReference || null,
+        notes: values.notes || null,
+        source_from_inventory_grams: fromInventory,
+        source_from_open_casting_grams: fromOpenCasting,
+        source_open_casting_id: values.sourceOpenCastingId || null,
+        remaining_unfinalized_balance_grams: values.totalGrams,
+      } as any);
+      if (castError) throw castError;
+
+      if (fromInventory > 0) {
+        const newStock = Math.round((available - fromInventory) * 100) / 100;
+        await supabase.from('metal_types').update({ current_stock_grams: newStock }).eq('id', metal.id);
+        await supabase.from('inventory_transactions').insert({
+          metal_type_id: metal.id,
+          grams: fromInventory,
+          transaction_type: 'extract_for_casting',
+          entered_by_user_id: user.id,
+          notes: `Casting ${flaskCode} (${fromInventory.toFixed(2)}g from inventory${fromOpenCasting > 0 ? `, ${fromOpenCasting.toFixed(2)}g from open casting` : ''}) — created by admin`,
+        });
+      }
+
+      if (values.sourceOpenCastingId && fromOpenCasting > 0) {
+        // Update source casting's transferred out
+        const { data: srcCasting } = await supabase.from('casting_records').select('*').eq('id', values.sourceOpenCastingId).single();
+        if (srcCasting) {
+          const currentTransferred = Number(srcCasting.sprue_transferred_to_next_casting_grams ?? 0);
+          const currentRemaining = Number(srcCasting.remaining_unfinalized_balance_grams ?? Number(srcCasting.extracted_grams) - currentTransferred);
+          await supabase.from('casting_records').update({
+            sprue_transferred_to_next_casting_grams: currentTransferred + fromOpenCasting,
+            remaining_unfinalized_balance_grams: Math.round((currentRemaining - fromOpenCasting) * 100) / 100,
+            has_sprue_transfer: true,
+            last_sprue_transfer_at: new Date().toISOString(),
+            status: 'open_with_sprue_transfer' as any,
+          }).eq('id', values.sourceOpenCastingId);
+        }
+      }
+
+      return flaskCode;
+    },
+    onSuccess: (flaskCode) => {
+      queryClient.invalidateQueries({ queryKey: ['casting_records'] });
+      queryClient.invalidateQueries({ queryKey: ['metal_types'] });
+      setCreateOpen(false);
+      toast.success(`Casting ${flaskCode} created`);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Casting Records</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Casting Records</h1>
+        <Button onClick={() => setCreateOpen(true)} size="sm">
+          <Plus className="h-4 w-4 mr-1" /> New Casting
+        </Button>
+      </div>
 
       {/* Filters */}
       <Card>
@@ -502,6 +582,13 @@ export default function CastingRecords() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Create new casting dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>New Casting</DialogTitle><DialogDescription>Create a casting record and deduct from inventory.</DialogDescription></DialogHeader>
+          <CreateCastingForm metals={metals ?? []} onSubmit={(v) => createCasting.mutate(v)} loading={createCasting.isPending} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -602,6 +689,132 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
       </div>
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? 'Saving...' : 'Save Adjustment'}
+      </Button>
+    </form>
+  );
+}
+
+function CreateCastingForm({ metals, onSubmit, loading }: { metals: any[]; onSubmit: (v: any) => void; loading: boolean }) {
+  const [metalId, setMetalId] = useState('');
+  const [grams, setGrams] = useState('');
+  const [jobReference, setJobReference] = useState('');
+  const [notes, setNotes] = useState('');
+  const [sourceOpenCastingId, setSourceOpenCastingId] = useState('');
+  const [openCastingGrams, setOpenCastingGrams] = useState('');
+
+  const selectedMetal = metals.find(m => m.id === metalId);
+  const totalGrams = parseFloat(grams) || 0;
+  const fromOpen = parseFloat(openCastingGrams) || 0;
+  const fromInventory = Math.round((totalGrams - fromOpen) * 100) / 100;
+  const available = selectedMetal ? Number(selectedMetal.current_stock_grams) : 0;
+
+  const { data: openCastings } = useQuery({
+    queryKey: ['open_castings_admin', metalId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('casting_records')
+        .select('id, casting_code, extracted_grams, sprue_transferred_to_next_casting_grams, remaining_unfinalized_balance_grams, finished_jewelry_grams, returned_button_grams')
+        .eq('metal_type_id', metalId)
+        .in('status', ['extracted_pending_completion', 'open_with_sprue_transfer'])
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((c: any) => {
+        const remaining = c.remaining_unfinalized_balance_grams != null
+          ? Number(c.remaining_unfinalized_balance_grams)
+          : Number(c.extracted_grams) - Number(c.sprue_transferred_to_next_casting_grams ?? 0) - Number(c.finished_jewelry_grams ?? 0) - Number(c.returned_button_grams ?? 0);
+        return { ...c, availableBalance: Math.round(remaining * 100) / 100 };
+      }).filter((c: any) => c.availableBalance > 0);
+    },
+    enabled: !!metalId,
+  });
+
+  const selectedOpenCasting = openCastings?.find((c: any) => c.id === sourceOpenCastingId);
+  const maxFromOpen = selectedOpenCasting ? selectedOpenCasting.availableBalance : 0;
+  const hasOpenCastings = (openCastings ?? []).length > 0;
+
+  const validationError = useMemo(() => {
+    if (totalGrams <= 0) return null;
+    if (fromOpen > maxFromOpen) return `Max ${maxFromOpen.toFixed(2)}g from selected casting`;
+    if (fromOpen > totalGrams) return 'Open casting source exceeds total';
+    if (fromInventory < 0) return 'Open casting source exceeds total';
+    if (fromInventory > available) return 'Insufficient inventory stock';
+    return null;
+  }, [totalGrams, fromOpen, maxFromOpen, fromInventory, available]);
+
+  return (
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      if (validationError) return;
+      onSubmit({ metalId, totalGrams, sourceOpenCastingId: sourceOpenCastingId || undefined, openCastingGrams: fromOpen, jobReference, notes });
+    }} className="space-y-4">
+      <div className="space-y-2">
+        <Label>Metal Type</Label>
+        <Select value={metalId} onValueChange={(v) => { setMetalId(v); setSourceOpenCastingId(''); setOpenCastingGrams(''); }}>
+          <SelectTrigger><SelectValue placeholder="Select metal" /></SelectTrigger>
+          <SelectContent>
+            {metals.map(m => (
+              <SelectItem key={m.id} value={m.id}>{m.metal_name} — {Number(m.current_stock_grams).toFixed(2)}g</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {selectedMetal && (
+        <div className="rounded-lg bg-muted p-3 text-sm">
+          Available inventory: <strong className="font-mono">{available.toFixed(2)}g</strong>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label>Total Grams</Label>
+        <Input type="number" step="0.01" min="0.01" value={grams} onChange={(e) => setGrams(e.target.value)} placeholder="0.00" className="font-mono" inputMode="decimal" required />
+      </div>
+
+      {hasOpenCastings && totalGrams > 0 && (
+        <div className="rounded-lg border border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-3">
+          <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Source from Open Casting (optional)</p>
+          <Select value={sourceOpenCastingId || 'none'} onValueChange={(v) => { setSourceOpenCastingId(v === 'none' ? '' : v); if (v === 'none') setOpenCastingGrams(''); }}>
+            <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">None — all from inventory</SelectItem>
+              {openCastings?.map((c: any) => (
+                <SelectItem key={c.id} value={c.id}>{c.casting_code} — {c.availableBalance.toFixed(2)}g</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {sourceOpenCastingId && (
+            <div className="space-y-1">
+              <Label className="text-xs">Grams from {selectedOpenCasting?.casting_code} (max {maxFromOpen.toFixed(2)}g)</Label>
+              <Input type="number" step="0.01" min="0" max={maxFromOpen} value={openCastingGrams} onChange={(e) => setOpenCastingGrams(e.target.value)} placeholder="0.00" className="h-9 font-mono" inputMode="decimal" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {totalGrams > 0 && metalId && (
+        <div className={cn('rounded-lg p-3 text-sm', validationError ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
+          {validationError ? validationError : (
+            <>
+              {fromOpen > 0 && <p>From open casting: <strong>{fromOpen.toFixed(2)}g</strong></p>}
+              <p>From inventory: <strong>{fromInventory.toFixed(2)}g</strong> → Remaining: <strong>{(available - fromInventory).toFixed(2)}g</strong></p>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label className="text-xs">Job Reference</Label>
+          <Input value={jobReference} onChange={(e) => setJobReference(e.target.value)} placeholder="e.g. WO-1234" className="h-9" />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs">Notes</Label>
+          <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" className="h-9" />
+        </div>
+      </div>
+
+      <Button type="submit" className="w-full" disabled={loading || totalGrams <= 0 || !metalId || !!validationError}>
+        {loading ? 'Creating...' : `Create Casting${totalGrams > 0 ? ` — ${totalGrams.toFixed(2)}g` : ''}`}
       </Button>
     </form>
   );
