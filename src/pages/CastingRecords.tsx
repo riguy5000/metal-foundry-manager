@@ -594,8 +594,6 @@ export default function CastingRecords() {
             <AlertDialogDescription>
               Are you sure you want to delete casting <strong className="font-mono">{selectedCasting?.casting_code}</strong>?
               This action cannot be undone. The deletion will be logged in the audit trail.
-              <br /><br />
-              <span className="text-destructive font-medium">Note: This will NOT automatically restore inventory. Adjust stock manually if needed.</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
