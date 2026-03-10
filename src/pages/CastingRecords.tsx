@@ -315,9 +315,87 @@ export default function CastingRecords() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const createCasting = useMutation({
+    mutationFn: async (values: { metalId: string; totalGrams: number; sourceOpenCastingId?: string; openCastingGrams: number; jobReference: string; notes: string }) => {
+      if (!user) throw new Error('Not authenticated');
+      const metal = metals?.find(m => m.id === values.metalId);
+      if (!metal) throw new Error('Metal not found');
+
+      const fromOpenCasting = values.openCastingGrams;
+      const fromInventory = Math.round((values.totalGrams - fromOpenCasting) * 100) / 100;
+      const available = Number(metal.current_stock_grams);
+
+      if (fromInventory > available) throw new Error('Insufficient inventory stock');
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const { count } = await supabase
+        .from('casting_records')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', today.toISOString());
+      const flaskCode = generateFlaskCode((count ?? 0) + 1);
+
+      const { error: castError } = await supabase.from('casting_records').insert({
+        casting_code: flaskCode,
+        metal_type_id: metal.id,
+        extracted_grams: values.totalGrams,
+        extracted_by_user_id: user.id,
+        job_reference: values.jobReference || null,
+        notes: values.notes || null,
+        source_from_inventory_grams: fromInventory,
+        source_from_open_casting_grams: fromOpenCasting,
+        source_open_casting_id: values.sourceOpenCastingId || null,
+        remaining_unfinalized_balance_grams: values.totalGrams,
+      } as any);
+      if (castError) throw castError;
+
+      if (fromInventory > 0) {
+        const newStock = Math.round((available - fromInventory) * 100) / 100;
+        await supabase.from('metal_types').update({ current_stock_grams: newStock }).eq('id', metal.id);
+        await supabase.from('inventory_transactions').insert({
+          metal_type_id: metal.id,
+          grams: fromInventory,
+          transaction_type: 'extract_for_casting',
+          entered_by_user_id: user.id,
+          notes: `Casting ${flaskCode} (${fromInventory.toFixed(2)}g from inventory${fromOpenCasting > 0 ? `, ${fromOpenCasting.toFixed(2)}g from open casting` : ''}) — created by admin`,
+        });
+      }
+
+      if (values.sourceOpenCastingId && fromOpenCasting > 0) {
+        // Update source casting's transferred out
+        const { data: srcCasting } = await supabase.from('casting_records').select('*').eq('id', values.sourceOpenCastingId).single();
+        if (srcCasting) {
+          const currentTransferred = Number(srcCasting.sprue_transferred_to_next_casting_grams ?? 0);
+          const currentRemaining = Number(srcCasting.remaining_unfinalized_balance_grams ?? Number(srcCasting.extracted_grams) - currentTransferred);
+          await supabase.from('casting_records').update({
+            sprue_transferred_to_next_casting_grams: currentTransferred + fromOpenCasting,
+            remaining_unfinalized_balance_grams: Math.round((currentRemaining - fromOpenCasting) * 100) / 100,
+            has_sprue_transfer: true,
+            last_sprue_transfer_at: new Date().toISOString(),
+            status: 'open_with_sprue_transfer' as any,
+          }).eq('id', values.sourceOpenCastingId);
+        }
+      }
+
+      return flaskCode;
+    },
+    onSuccess: (flaskCode) => {
+      queryClient.invalidateQueries({ queryKey: ['casting_records'] });
+      queryClient.invalidateQueries({ queryKey: ['metal_types'] });
+      setCreateOpen(false);
+      toast.success(`Casting ${flaskCode} created`);
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Casting Records</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Casting Records</h1>
+        <Button onClick={() => setCreateOpen(true)} size="sm">
+          <Plus className="h-4 w-4 mr-1" /> New Casting
+        </Button>
+      </div>
 
       {/* Filters */}
       <Card>
