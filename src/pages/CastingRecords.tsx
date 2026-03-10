@@ -184,7 +184,8 @@ export default function CastingRecords() {
       };
 
       // If transferred out changed, update it
-      if (newTransferredOut !== oldSprueTrans) {
+      const transferDelta = newTransferredOut - oldSprueTrans;
+      if (transferDelta !== 0) {
         updatePayload.sprue_transferred_to_next_casting_grams = newTransferredOut;
         updatePayload.has_sprue_transfer = newTransferredOut > 0;
       }
@@ -195,18 +196,27 @@ export default function CastingRecords() {
         .eq('id', casting.id);
       if (error) throw error;
 
-      if (returnedDelta !== 0) {
+      // Calculate total inventory adjustment: returned button delta + transferred out delta
+      // Transferred out metal goes back to inventory (available for new castings)
+      const totalInventoryDelta = returnedDelta + transferDelta;
+
+      if (totalInventoryDelta !== 0) {
         const metal = metals?.find((m) => m.id === casting.metal_type_id);
         if (metal) {
           await supabase.from('metal_types').update({
-            current_stock_grams: Number(metal.current_stock_grams) + returnedDelta,
+            current_stock_grams: Math.round((Number(metal.current_stock_grams) + totalInventoryDelta) * 100) / 100,
           }).eq('id', casting.metal_type_id);
+
+          const parts: string[] = [];
+          if (returnedDelta !== 0) parts.push(`returned button ${returnedDelta > 0 ? '+' : ''}${returnedDelta.toFixed(2)}g`);
+          if (transferDelta !== 0) parts.push(`transferred out ${transferDelta > 0 ? '+' : ''}${transferDelta.toFixed(2)}g back to inventory`);
+
           await supabase.from('inventory_transactions').insert({
             metal_type_id: casting.metal_type_id,
-            grams: Math.abs(returnedDelta),
+            grams: Math.abs(totalInventoryDelta),
             transaction_type: 'manual_adjustment',
             entered_by_user_id: user!.id,
-            notes: `Admin adjustment on casting ${casting.casting_code} (returned button ${returnedDelta > 0 ? '+' : ''}${returnedDelta.toFixed(2)}g)`,
+            notes: `Admin adjustment on casting ${casting.casting_code} (${parts.join(', ')})`,
             related_casting_id: casting.id,
           });
         }
