@@ -43,6 +43,7 @@ export default function CastingRecords() {
   const [completeOpen, setCompleteOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedCasting, setSelectedCasting] = useState<any>(null);
 
   const [fromDate, setFromDate] = useState('');
