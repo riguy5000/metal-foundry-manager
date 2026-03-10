@@ -20,10 +20,8 @@ export default function EmployeeComplete() {
   const [returnedGrams, setReturnedGrams] = useState('');
   const [jewelryGrams, setJewelryGrams] = useState('');
   const [abnormalityNote, setAbnormalityNote] = useState('');
-  const [transferGrams, setTransferGrams] = useState('');
-  const [transferNote, setTransferNote] = useState('');
 
-  const { data: casting, refetch: refetchCasting } = useQuery({
+  const { data: casting } = useQuery({
     queryKey: ['casting_record', castingId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -49,70 +47,8 @@ export default function EmployeeComplete() {
   const jewelry = parseFloat(jewelryGrams) || 0;
   const extracted = casting ? Number(casting.extracted_grams) : 0;
   const alreadyTransferred = casting ? Number((casting as any).sprue_transferred_to_next_casting_grams ?? 0) : 0;
-
-  // Available balance for transfer (before finalization fields are filled)
-  const availableBalance = extracted - alreadyTransferred - returned - jewelry;
-
-  // Sprue transfer mutation
-  const transferMutation = useMutation({
-    mutationFn: async () => {
-      if (!casting || !user) throw new Error('Missing data');
-      const amount = parseFloat(transferGrams);
-      if (!amount || amount <= 0) throw new Error('Enter a valid amount');
-
-      const currentAvailable = extracted - alreadyTransferred - (parseFloat(returnedGrams) || 0) - (parseFloat(jewelryGrams) || 0);
-      if (amount > currentAvailable) throw new Error(`Cannot transfer more than ${currentAvailable.toFixed(2)}g available`);
-
-      const mt = casting.metal_types as any;
-      const newTransferTotal = alreadyTransferred + amount;
-
-      // Update casting record
-      const { error } = await supabase.from('casting_records').update({
-        sprue_transferred_to_next_casting_grams: newTransferTotal,
-        has_sprue_transfer: true,
-        last_sprue_transfer_at: new Date().toISOString(),
-        sprue_transfer_notes: transferNote || null,
-        remaining_unfinalized_balance_grams: extracted - newTransferTotal,
-        status: 'open_with_sprue_transfer' as any,
-      }).eq('id', casting.id);
-      if (error) throw error;
-
-      // Add transferred sprue back to inventory
-      await supabase.from('metal_types').update({
-        current_stock_grams: Number(mt.current_stock_grams) + amount,
-      }).eq('id', mt.id);
-
-      // Create inventory transaction
-      await supabase.from('inventory_transactions').insert({
-        metal_type_id: mt.id,
-        grams: amount,
-        transaction_type: 'sprue_transfer_from_open_casting' as any,
-        entered_by_user_id: user.id,
-        notes: `Sprue transfer from open casting ${casting.casting_code}${transferNote ? ` — ${transferNote}` : ''}`,
-        related_casting_id: casting.id,
-      });
-
-      // Audit log
-      await supabase.from('audit_logs').insert({
-        action_type: 'sprue_transfer',
-        entity_type: 'casting_record',
-        entity_id: casting.id,
-        user_id: user.id,
-        before_json: { sprue_transferred: alreadyTransferred },
-        after_json: { sprue_transferred: newTransferTotal, transfer_amount: amount },
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['metal_types'] });
-      queryClient.invalidateQueries({ queryKey: ['casting_record', castingId] });
-      queryClient.invalidateQueries({ queryKey: ['my_pending'] });
-      setTransferGrams('');
-      setTransferNote('');
-      refetchCasting();
-      toast.success('Sprue transfer recorded. Transferred amount added back to available stock.');
-    },
-    onError: (e: any) => toast.error(e.message),
-  });
+  const sourceFromOpenCasting = casting ? Number((casting as any).source_from_open_casting_grams ?? 0) : 0;
+  const sourceFromInventory = casting ? Number((casting as any).source_from_inventory_grams ?? 0) : 0;
 
   const completeMutation = useMutation({
     mutationFn: async () => {
@@ -138,6 +74,7 @@ export default function EmployeeComplete() {
       }).eq('id', casting.id);
       if (error) throw error;
 
+      // Return sprue/button to inventory (this is actual metal coming back)
       if (returned > 0) {
         const mt = casting.metal_types as any;
         await supabase.from('metal_types').update({
@@ -153,7 +90,7 @@ export default function EmployeeComplete() {
         });
       }
 
-      // Audit log for completion with transfer
+      // Audit log for completion
       if (alreadyTransferred > 0) {
         await supabase.from('audit_logs').insert({
           action_type: 'casting_completed_with_transfer',
@@ -204,48 +141,30 @@ export default function EmployeeComplete() {
         <div className="font-mono text-5xl font-bold text-foreground leading-none">
           {extracted.toFixed(2)}
         </div>
-        <div className="text-sm text-muted-foreground mt-1">g extracted</div>
+        <div className="text-sm text-muted-foreground mt-1">g total for casting</div>
+
+        {/* Sourcing breakdown */}
+        {sourceFromOpenCasting > 0 && (
+          <div className="mt-3 space-y-1 text-sm">
+            <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+              <ArrowRightLeft className="h-3.5 w-3.5" />
+              <span>{sourceFromOpenCasting.toFixed(2)}g from open casting</span>
+            </div>
+            <div className="text-foreground/70">
+              {sourceFromInventory.toFixed(2)}g from inventory
+            </div>
+          </div>
+        )}
+
         {alreadyTransferred > 0 && (
           <div className="mt-2 text-sm font-medium text-foreground/80">
             <ArrowRightLeft className="h-3.5 w-3.5 inline mr-1" />
-            {alreadyTransferred.toFixed(2)}g already transferred to next casting
+            {alreadyTransferred.toFixed(2)}g transferred out to other castings
           </div>
         )}
       </div>
 
-      {/* Section B — Sprue Transfer for Next Casting */}
-      {!isFinalized && (
-        <div className="rounded-lg border border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 px-4 py-3 mb-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <ArrowRightLeft className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-            <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">Sprue Transfer</h3>
-            <span className="ml-auto text-[10px] text-muted-foreground font-mono">
-              {alreadyTransferred.toFixed(1)}g sent · {availableBalance.toFixed(1)}g avail
-            </span>
-          </div>
-          <div className="flex items-end gap-2">
-            <div className="flex-1 space-y-1">
-              <Label className="text-xs text-amber-800 dark:text-amber-300">Grams</Label>
-              <Input
-                type="number" step="0.01" min="0"
-                value={transferGrams} onChange={(e) => setTransferGrams(e.target.value)}
-                placeholder="0.00" className="h-10 text-base font-mono text-center" inputMode="decimal"
-              />
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => transferMutation.mutate()}
-              disabled={transferMutation.isPending || !transferGrams || parseFloat(transferGrams) <= 0 || parseFloat(transferGrams) > availableBalance}
-              className="h-10 px-4 text-sm font-semibold border-amber-500/50 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-            >
-              {transferMutation.isPending ? '...' : 'Transfer'}
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Section A — Final Completion */}
+      {/* Final Completion */}
       <div className="space-y-5">
         <h3 className="text-base font-semibold text-foreground">Final Completion</h3>
 
@@ -266,7 +185,7 @@ export default function EmployeeComplete() {
             value={returnedGrams} onChange={(e) => setReturnedGrams(e.target.value)}
             placeholder="0.00" className="h-14 text-2xl font-mono text-center" inputMode="decimal"
           />
-          <p className="text-xs text-muted-foreground">Sprue/button weight to return</p>
+          <p className="text-xs text-muted-foreground">Sprue/button weight to return to inventory</p>
         </div>
 
         <div className="space-y-2">

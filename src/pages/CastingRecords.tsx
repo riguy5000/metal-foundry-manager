@@ -42,7 +42,6 @@ export default function CastingRecords() {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [selectedCasting, setSelectedCasting] = useState<any>(null);
 
-  // Filter state
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [filterMetal, setFilterMetal] = useState('all');
@@ -79,7 +78,6 @@ export default function CastingRecords() {
     },
   });
 
-  // Apply filters
   const filteredCastings = useMemo(() => {
     if (!castings) return [];
     return castings.filter((c) => {
@@ -102,7 +100,7 @@ export default function CastingRecords() {
       const casting = selectedCasting;
       const returnedButton = values.returnedButtonGrams;
       const finishedJewelry = values.finishedJewelryGrams;
-      const sprueTrans = Number((casting as any).sprue_transferred_to_next_casting_grams ?? 0);
+      const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
       const totalAccounted = returnedButton + finishedJewelry + sprueTrans;
       const discrepancyGrams = Number(casting.extracted_grams) - totalAccounted;
       const discrepancyPercent = (Math.abs(discrepancyGrams) / Number(casting.extracted_grams)) * 100;
@@ -159,14 +157,13 @@ export default function CastingRecords() {
       const returnedButton = values.returnedButtonGrams;
       const finishedJewelry = values.finishedJewelryGrams;
       const extracted = Number(casting.extracted_grams);
-      const sprueTrans = Number((casting as any).sprue_transferred_to_next_casting_grams ?? 0);
+      const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
       const totalAccounted = returnedButton + finishedJewelry + sprueTrans;
       const discrepancyGrams = extracted - totalAccounted;
       const discrepancyPercent = (Math.abs(discrepancyGrams) / extracted) * 100;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
       const flag = discrepancyPercent > tolerance;
 
-      // Calculate inventory delta: difference between new and old returned button
       const oldReturned = Number(casting.returned_button_grams) || 0;
       const returnedDelta = returnedButton - oldReturned;
 
@@ -185,7 +182,6 @@ export default function CastingRecords() {
         .eq('id', casting.id);
       if (error) throw error;
 
-      // Adjust inventory if returned button changed
       if (returnedDelta !== 0) {
         const metal = metals?.find((m) => m.id === casting.metal_type_id);
         if (metal) {
@@ -253,11 +249,7 @@ export default function CastingRecords() {
               </Select>
             </div>
             <div className="flex items-center gap-2 pb-0.5">
-              <Checkbox
-                id="disc-only"
-                checked={discrepancyOnly}
-                onCheckedChange={(v) => setDiscrepancyOnly(!!v)}
-              />
+              <Checkbox id="disc-only" checked={discrepancyOnly} onCheckedChange={(v) => setDiscrepancyOnly(!!v)} />
               <Label htmlFor="disc-only" className="text-sm">Discrepancy only</Label>
             </div>
           </div>
@@ -274,14 +266,15 @@ export default function CastingRecords() {
                 <TableHead>Date</TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Metal</TableHead>
-                <TableHead className="text-right">Extracted</TableHead>
-                <TableHead className="text-right">Transferred</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="text-right">Inv.</TableHead>
+                <TableHead className="text-right">Reused</TableHead>
+                <TableHead className="text-right">Xfer Out</TableHead>
                 <TableHead className="text-right">Jewelry</TableHead>
                 <TableHead className="text-right">Returned</TableHead>
-                <TableHead className="text-right">Disc. (g)</TableHead>
                 <TableHead className="text-right">Disc. %</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Extracted By</TableHead>
+                <TableHead>By</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
@@ -290,33 +283,33 @@ export default function CastingRecords() {
                 const profile = c.profiles as any;
                 const isCompleted = c.status === 'completed' || c.status === 'flagged';
                 const isPending = c.status === 'extracted_pending_completion' || c.status === 'open_with_sprue_transfer';
-                const sprueTransferred = Number((c as any).sprue_transferred_to_next_casting_grams ?? 0);
+                const sprueOut = Number(c.sprue_transferred_to_next_casting_grams ?? 0);
+                const fromInventory = Number((c as any).source_from_inventory_grams ?? 0);
+                const fromOpenCasting = Number((c as any).source_from_open_casting_grams ?? 0);
                 return (
                   <TableRow key={c.id} className={cn(isPending && 'cursor-pointer hover:bg-muted/50')} onClick={() => {
-                    if (isPending) {
-                      setSelectedCasting(c);
-                      setCompleteOpen(true);
-                    }
+                    if (isPending) { setSelectedCasting(c); setCompleteOpen(true); }
                   }}>
                     <TableCell className="text-sm text-muted-foreground">{format(new Date(c.created_at), 'M/d/yyyy')}</TableCell>
                     <TableCell className="font-mono text-sm font-medium">{c.casting_code}</TableCell>
                     <TableCell className="text-sm">{(c.metal_types as any)?.metal_name}</TableCell>
                     <TableCell className="text-right font-mono text-sm font-bold">{Number(c.extracted_grams).toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{fromInventory > 0 ? fromInventory.toFixed(2) : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">
-                      {sprueTransferred > 0 ? (
-                        <span className="text-amber-600 dark:text-amber-400 font-medium">{sprueTransferred.toFixed(2)}</span>
+                      {fromOpenCasting > 0 ? (
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">{fromOpenCasting.toFixed(2)}</span>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {sprueOut > 0 ? (
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">{sprueOut.toFixed(2)}</span>
                       ) : '—'}
                     </TableCell>
                     <TableCell className="text-right font-mono text-sm">{c.finished_jewelry_grams != null ? Number(c.finished_jewelry_grams).toFixed(2) : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">{c.returned_button_grams != null ? Number(c.returned_button_grams).toFixed(2) : '—'}</TableCell>
                     <TableCell className="text-right font-mono text-sm">
-                      {c.discrepancy_grams != null ? Number(c.discrepancy_grams).toFixed(2) : '—'}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
                       {c.discrepancy_percent != null ? (
-                        <span className={cn(
-                          Math.abs(Number(c.discrepancy_percent)) > 2 ? 'text-destructive font-bold' : ''
-                        )}>
+                        <span className={cn(Math.abs(Number(c.discrepancy_percent)) > 2 ? 'text-destructive font-bold' : '')}>
                           {Number(c.discrepancy_percent).toFixed(1)}%
                         </span>
                       ) : '—'}
@@ -329,16 +322,11 @@ export default function CastingRecords() {
                     <TableCell className="text-sm text-muted-foreground">{profile?.full_name ?? '—'}</TableCell>
                     <TableCell>
                       {isCompleted && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedCasting(c);
-                            setAdjustOpen(true);
-                          }}
-                        >
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedCasting(c);
+                          setAdjustOpen(true);
+                        }}>
                           <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                         </Button>
                       )}
@@ -348,7 +336,7 @@ export default function CastingRecords() {
               })}
               {filteredCastings.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-muted-foreground py-8">No casting records</TableCell>
+                  <TableCell colSpan={13} className="text-center text-muted-foreground py-8">No casting records</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -356,30 +344,20 @@ export default function CastingRecords() {
         </CardContent>
       </Card>
 
-      {/* Complete pending casting dialog */}
       <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Complete Casting — {selectedCasting?.casting_code}</DialogTitle></DialogHeader>
           {selectedCasting && (
-            <CompleteCastingForm
-              casting={selectedCasting}
-              onSubmit={(v) => completeCasting.mutate(v)}
-              loading={completeCasting.isPending}
-            />
+            <CompleteCastingForm casting={selectedCasting} onSubmit={(v) => completeCasting.mutate(v)} loading={completeCasting.isPending} />
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Adjust completed casting dialog */}
       <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Adjust Casting — {selectedCasting?.casting_code}</DialogTitle></DialogHeader>
           {selectedCasting && adjustOpen && (
-            <AdjustCastingForm
-              casting={selectedCasting}
-              onSubmit={(v) => adjustCasting.mutate(v)}
-              loading={adjustCasting.isPending}
-            />
+            <AdjustCastingForm casting={selectedCasting} onSubmit={(v) => adjustCasting.mutate(v)} loading={adjustCasting.isPending} />
           )}
         </DialogContent>
       </Dialog>
@@ -396,16 +374,17 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
   const jewelry = parseFloat(finishedJewelryGrams) || 0;
   const extracted = Number(casting.extracted_grams);
   const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
+  const fromInv = Number(casting.source_from_inventory_grams ?? 0);
+  const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
   const discrepancy = extracted - sprueTrans - (returned + jewelry);
   const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ returnedButtonGrams: returned, finishedJewelryGrams: jewelry, abnormalityNote }); }} className="space-y-4">
       <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
-        <p>Extracted: <strong>{extracted.toFixed(2)}g</strong></p>
-        {sprueTrans > 0 && (
-          <p className="text-amber-700 dark:text-amber-400">Sprue transferred: <strong>{sprueTrans.toFixed(2)}g</strong></p>
-        )}
+        <p>Total: <strong>{extracted.toFixed(2)}g</strong></p>
+        {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
+        {sprueTrans > 0 && <p className="text-amber-700 dark:text-amber-400">Transferred out: <strong>{sprueTrans.toFixed(2)}g</strong></p>}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -443,16 +422,17 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
   const jewelry = parseFloat(finishedJewelryGrams) || 0;
   const extracted = Number(casting.extracted_grams);
   const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
+  const fromInv = Number(casting.source_from_inventory_grams ?? 0);
+  const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
   const discrepancy = extracted - sprueTrans - (returned + jewelry);
   const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit({ returnedButtonGrams: returned, finishedJewelryGrams: jewelry, abnormalityNote }); }} className="space-y-4">
       <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
-        <p>Extracted: <strong>{extracted.toFixed(2)}g</strong></p>
-        {sprueTrans > 0 && (
-          <p className="text-amber-700 dark:text-amber-400">Sprue transferred: <strong>{sprueTrans.toFixed(2)}g</strong></p>
-        )}
+        <p>Total: <strong>{extracted.toFixed(2)}g</strong></p>
+        {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
+        {sprueTrans > 0 && <p className="text-amber-700 dark:text-amber-400">Transferred out: <strong>{sprueTrans.toFixed(2)}g</strong></p>}
         <p className="text-xs text-muted-foreground">
           Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g
         </p>
