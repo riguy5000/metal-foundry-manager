@@ -163,25 +163,43 @@ export default function CastingRecords() {
       const newTransferredOut = values.transferredOutGrams;
       const extracted = Number(casting.extracted_grams);
       const oldSprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
-      const totalAccounted = returnedButton + finishedJewelry + newTransferredOut;
-      const discrepancyGrams = extracted - totalAccounted;
-      const discrepancyPercent = (Math.abs(discrepancyGrams) / extracted) * 100;
-      const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
-      const flag = discrepancyPercent > tolerance;
-
       const oldReturned = Number(casting.returned_button_grams) || 0;
       const returnedDelta = returnedButton - oldReturned;
+
+      // Only calculate discrepancy and set final status when the casting is actually being completed
+      // (i.e. has jewelry or returned button values). Otherwise keep it pending/open.
+      const isBeingCompleted = returnedButton > 0 || finishedJewelry > 0;
+      const wasAlreadyCompleted = casting.status === 'completed' || casting.status === 'flagged';
 
       const updatePayload: any = {
         returned_button_grams: returnedButton,
         finished_jewelry_grams: finishedJewelry,
-        discrepancy_grams: discrepancyGrams,
-        discrepancy_percent: discrepancyPercent,
-        tolerance_percent_used: tolerance,
-        discrepancy_flag: flag,
-        status: (flag ? 'flagged' : 'completed') as any,
         abnormality_note: values.abnormalityNote || null,
       };
+
+      if (isBeingCompleted || wasAlreadyCompleted) {
+        const totalAccounted = returnedButton + finishedJewelry + newTransferredOut;
+        const discrepancyGrams = extracted - totalAccounted;
+        const discrepancyPercent = (Math.abs(discrepancyGrams) / extracted) * 100;
+        const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
+        const flag = discrepancyPercent > tolerance;
+
+        updatePayload.discrepancy_grams = discrepancyGrams;
+        updatePayload.discrepancy_percent = discrepancyPercent;
+        updatePayload.tolerance_percent_used = tolerance;
+        updatePayload.discrepancy_flag = flag;
+        updatePayload.status = (flag ? 'flagged' : 'completed') as any;
+        if (!wasAlreadyCompleted) {
+          updatePayload.completed_by_user_id = user!.id;
+          updatePayload.completed_at = new Date().toISOString();
+          updatePayload.remaining_unfinalized_balance_grams = 0;
+        }
+      } else {
+        // Not completing — keep status as pending or open_with_sprue_transfer
+        if (newTransferredOut > 0) {
+          updatePayload.status = 'open_with_sprue_transfer' as any;
+        }
+      }
 
       // If transferred out changed, update it
       const transferDelta = newTransferredOut - oldSprueTrans;
