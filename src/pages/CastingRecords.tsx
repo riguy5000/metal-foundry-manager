@@ -8,14 +8,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { useState, useMemo } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Pencil } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -40,6 +41,7 @@ export default function CastingRecords() {
   const { user } = useAuth();
   const [completeOpen, setCompleteOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [selectedCasting, setSelectedCasting] = useState<any>(null);
 
   const [fromDate, setFromDate] = useState('');
@@ -156,9 +158,10 @@ export default function CastingRecords() {
       const casting = selectedCasting;
       const returnedButton = values.returnedButtonGrams;
       const finishedJewelry = values.finishedJewelryGrams;
+      const newTransferredOut = values.transferredOutGrams;
       const extracted = Number(casting.extracted_grams);
-      const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
-      const totalAccounted = returnedButton + finishedJewelry + sprueTrans;
+      const oldSprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
+      const totalAccounted = returnedButton + finishedJewelry + newTransferredOut;
       const discrepancyGrams = extracted - totalAccounted;
       const discrepancyPercent = (Math.abs(discrepancyGrams) / extracted) * 100;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
@@ -167,18 +170,26 @@ export default function CastingRecords() {
       const oldReturned = Number(casting.returned_button_grams) || 0;
       const returnedDelta = returnedButton - oldReturned;
 
+      const updatePayload: any = {
+        returned_button_grams: returnedButton,
+        finished_jewelry_grams: finishedJewelry,
+        discrepancy_grams: discrepancyGrams,
+        discrepancy_percent: discrepancyPercent,
+        tolerance_percent_used: tolerance,
+        discrepancy_flag: flag,
+        status: (flag ? 'flagged' : 'completed') as any,
+        abnormality_note: values.abnormalityNote || null,
+      };
+
+      // If transferred out changed, update it
+      if (newTransferredOut !== oldSprueTrans) {
+        updatePayload.sprue_transferred_to_next_casting_grams = newTransferredOut;
+        updatePayload.has_sprue_transfer = newTransferredOut > 0;
+      }
+
       const { error } = await supabase
         .from('casting_records')
-        .update({
-          returned_button_grams: returnedButton,
-          finished_jewelry_grams: finishedJewelry,
-          discrepancy_grams: discrepancyGrams,
-          discrepancy_percent: discrepancyPercent,
-          tolerance_percent_used: tolerance,
-          discrepancy_flag: flag,
-          status: (flag ? 'flagged' : 'completed') as any,
-          abnormality_note: values.abnormalityNote || null,
-        })
+        .update(updatePayload)
         .eq('id', casting.id);
       if (error) throw error;
 
@@ -198,12 +209,69 @@ export default function CastingRecords() {
           });
         }
       }
+
+      // Audit log for the adjustment
+      await supabase.from('audit_logs').insert({
+        action_type: 'admin_casting_adjustment',
+        entity_type: 'casting_record',
+        entity_id: casting.id,
+        user_id: user!.id,
+        before_json: {
+          returned_button: oldReturned,
+          finished_jewelry: Number(casting.finished_jewelry_grams ?? 0),
+          transferred_out: oldSprueTrans,
+        },
+        after_json: {
+          returned_button: returnedButton,
+          finished_jewelry: finishedJewelry,
+          transferred_out: newTransferredOut,
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['casting_records'] });
       queryClient.invalidateQueries({ queryKey: ['metal_types'] });
       setAdjustOpen(false);
       toast.success('Casting record adjusted');
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteCasting = useMutation({
+    mutationFn: async () => {
+      const casting = selectedCasting;
+      if (!casting || !user) throw new Error('Missing data');
+
+      // Audit log before deletion
+      await supabase.from('audit_logs').insert({
+        action_type: 'admin_casting_deleted',
+        entity_type: 'casting_record',
+        entity_id: casting.id,
+        user_id: user.id,
+        before_json: {
+          casting_code: casting.casting_code,
+          extracted_grams: Number(casting.extracted_grams),
+          status: casting.status,
+          metal_type_id: casting.metal_type_id,
+          source_from_inventory_grams: Number((casting as any).source_from_inventory_grams ?? 0),
+          returned_button_grams: Number(casting.returned_button_grams ?? 0),
+          finished_jewelry_grams: Number(casting.finished_jewelry_grams ?? 0),
+          sprue_transferred_out: Number(casting.sprue_transferred_to_next_casting_grams ?? 0),
+        },
+      });
+
+      const { error } = await supabase
+        .from('casting_records')
+        .delete()
+        .eq('id', casting.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['casting_records'] });
+      queryClient.invalidateQueries({ queryKey: ['metal_types'] });
+      setDeleteOpen(false);
+      setSelectedCasting(null);
+      toast.success('Casting record deleted');
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -275,7 +343,7 @@ export default function CastingRecords() {
                 <TableHead className="text-right">Disc. %</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>By</TableHead>
-                <TableHead className="w-10"></TableHead>
+                <TableHead className="w-20"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -321,15 +389,24 @@ export default function CastingRecords() {
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">{profile?.full_name ?? '—'}</TableCell>
                     <TableCell>
-                      {isCompleted && (
+                      <div className="flex items-center gap-1">
+                        {isCompleted && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedCasting(c);
+                            setAdjustOpen(true);
+                          }}>
+                            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => {
                           e.stopPropagation();
                           setSelectedCasting(c);
-                          setAdjustOpen(true);
+                          setDeleteOpen(true);
                         }}>
-                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
                         </Button>
-                      )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -344,6 +421,7 @@ export default function CastingRecords() {
         </CardContent>
       </Card>
 
+      {/* Complete pending casting dialog */}
       <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Complete Casting — {selectedCasting?.casting_code}</DialogTitle></DialogHeader>
@@ -353,6 +431,7 @@ export default function CastingRecords() {
         </DialogContent>
       </Dialog>
 
+      {/* Adjust completed casting dialog */}
       <Dialog open={adjustOpen} onOpenChange={setAdjustOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Adjust Casting — {selectedCasting?.casting_code}</DialogTitle></DialogHeader>
@@ -361,6 +440,31 @@ export default function CastingRecords() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Casting Record</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete casting <strong className="font-mono">{selectedCasting?.casting_code}</strong>?
+              This action cannot be undone. The deletion will be logged in the audit trail.
+              <br /><br />
+              <span className="text-destructive font-medium">Note: This will NOT automatically restore inventory. Adjust stock manually if needed.</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteCasting.mutate()}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteCasting.isPending}
+            >
+              {deleteCasting.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -416,35 +520,39 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
 function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSubmit: (v: any) => void; loading: boolean }) {
   const [returnedButtonGrams, setReturnedButtonGrams] = useState(String(Number(casting.returned_button_grams ?? 0)));
   const [finishedJewelryGrams, setFinishedJewelryGrams] = useState(String(Number(casting.finished_jewelry_grams ?? 0)));
+  const [transferredOutGrams, setTransferredOutGrams] = useState(String(Number(casting.sprue_transferred_to_next_casting_grams ?? 0)));
   const [abnormalityNote, setAbnormalityNote] = useState(casting.abnormality_note ?? '');
 
   const returned = parseFloat(returnedButtonGrams) || 0;
   const jewelry = parseFloat(finishedJewelryGrams) || 0;
+  const transferredOut = parseFloat(transferredOutGrams) || 0;
   const extracted = Number(casting.extracted_grams);
-  const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
   const fromInv = Number(casting.source_from_inventory_grams ?? 0);
   const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
-  const discrepancy = extracted - sprueTrans - (returned + jewelry);
+  const discrepancy = extracted - transferredOut - (returned + jewelry);
   const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ returnedButtonGrams: returned, finishedJewelryGrams: jewelry, abnormalityNote }); }} className="space-y-4">
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ returnedButtonGrams: returned, finishedJewelryGrams: jewelry, transferredOutGrams: transferredOut, abnormalityNote }); }} className="space-y-4">
       <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
         <p>Total: <strong>{extracted.toFixed(2)}g</strong></p>
         {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
-        {sprueTrans > 0 && <p className="text-amber-700 dark:text-amber-400">Transferred out: <strong>{sprueTrans.toFixed(2)}g</strong></p>}
         <p className="text-xs text-muted-foreground">
-          Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g
+          Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g · Xfer Out {Number(casting.sprue_transferred_to_next_casting_grams ?? 0).toFixed(2)}g
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-3">
         <div className="space-y-2">
-          <Label>Returned Button (g)</Label>
+          <Label className="text-xs">Returned Button (g)</Label>
           <Input type="number" step="0.01" min="0" value={returnedButtonGrams} onChange={(e) => setReturnedButtonGrams(e.target.value)} required />
         </div>
         <div className="space-y-2">
-          <Label>Finished Jewelry (g)</Label>
+          <Label className="text-xs">Finished Jewelry (g)</Label>
           <Input type="number" step="0.01" min="0" value={finishedJewelryGrams} onChange={(e) => setFinishedJewelryGrams(e.target.value)} required />
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs">Transferred Out (g)</Label>
+          <Input type="number" step="0.01" min="0" value={transferredOutGrams} onChange={(e) => setTransferredOutGrams(e.target.value)} />
         </div>
       </div>
       <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
