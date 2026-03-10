@@ -264,7 +264,6 @@ export default function CastingRecords() {
             transaction_type: 'manual_adjustment',
             entered_by_user_id: user.id,
             notes: `Admin deleted casting ${casting.casting_code} — reversed ${stockAdjustment > 0 ? '+' : ''}${stockAdjustment.toFixed(2)}g to inventory`,
-            related_casting_id: casting.id,
           });
         }
       }
@@ -287,6 +286,16 @@ export default function CastingRecords() {
           stock_adjustment: stockAdjustment,
         },
       });
+
+      // Nullify foreign key references before deleting
+      await supabase.from('inventory_transactions')
+        .update({ related_casting_id: null })
+        .eq('related_casting_id', casting.id);
+
+      // Also nullify source_open_casting_id on any castings that referenced this one
+      await supabase.from('casting_records')
+        .update({ source_open_casting_id: null })
+        .eq('source_open_casting_id', casting.id);
 
       const { error } = await supabase
         .from('casting_records')
