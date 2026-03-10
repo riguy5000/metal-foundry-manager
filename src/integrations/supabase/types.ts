@@ -69,6 +69,9 @@ export type Database = {
           notes: string | null
           remaining_unfinalized_balance_grams: number | null
           returned_button_grams: number | null
+          source_from_inventory_grams: number
+          source_from_open_casting_grams: number
+          source_open_casting_id: string | null
           sprue_transfer_notes: string | null
           sprue_transferred_to_next_casting_grams: number
           status: Database["public"]["Enums"]["casting_status"]
@@ -96,6 +99,9 @@ export type Database = {
           notes?: string | null
           remaining_unfinalized_balance_grams?: number | null
           returned_button_grams?: number | null
+          source_from_inventory_grams?: number
+          source_from_open_casting_grams?: number
+          source_open_casting_id?: string | null
           sprue_transfer_notes?: string | null
           sprue_transferred_to_next_casting_grams?: number
           status?: Database["public"]["Enums"]["casting_status"]
@@ -123,6 +129,9 @@ export type Database = {
           notes?: string | null
           remaining_unfinalized_balance_grams?: number | null
           returned_button_grams?: number | null
+          source_from_inventory_grams?: number
+          source_from_open_casting_grams?: number
+          source_open_casting_id?: string | null
           sprue_transfer_notes?: string | null
           sprue_transferred_to_next_casting_grams?: number
           status?: Database["public"]["Enums"]["casting_status"]
@@ -149,6 +158,13 @@ export type Database = {
             columns: ["metal_type_id"]
             isOneToOne: false
             referencedRelation: "metal_types"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "casting_records_source_open_casting_id_fkey"
+            columns: ["source_open_casting_id"]
+            isOneToOne: false
+            referencedRelation: "casting_records"
             referencedColumns: ["id"]
           },
         ]
