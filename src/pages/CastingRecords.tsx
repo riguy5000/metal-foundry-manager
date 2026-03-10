@@ -242,6 +242,33 @@ export default function CastingRecords() {
       const casting = selectedCasting;
       if (!casting || !user) throw new Error('Missing data');
 
+      const sourceFromInventory = Number((casting as any).source_from_inventory_grams ?? casting.extracted_grams ?? 0);
+      const returnedButton = Number(casting.returned_button_grams ?? 0);
+      const isCompleted = casting.status === 'completed' || casting.status === 'flagged';
+
+      // Reverse inventory effects:
+      // Extraction took source_from_inventory_grams from stock → add back
+      // If completed, returned_button_grams was added to stock → subtract back
+      const stockAdjustment = sourceFromInventory - (isCompleted ? returnedButton : 0);
+
+      if (stockAdjustment !== 0) {
+        const metal = metals?.find((m) => m.id === casting.metal_type_id);
+        if (metal) {
+          await supabase.from('metal_types').update({
+            current_stock_grams: Number(metal.current_stock_grams) + stockAdjustment,
+          }).eq('id', casting.metal_type_id);
+
+          await supabase.from('inventory_transactions').insert({
+            metal_type_id: casting.metal_type_id,
+            grams: Math.abs(stockAdjustment),
+            transaction_type: 'manual_adjustment',
+            entered_by_user_id: user.id,
+            notes: `Admin deleted casting ${casting.casting_code} — reversed ${stockAdjustment > 0 ? '+' : ''}${stockAdjustment.toFixed(2)}g to inventory`,
+            related_casting_id: casting.id,
+          });
+        }
+      }
+
       // Audit log before deletion
       await supabase.from('audit_logs').insert({
         action_type: 'admin_casting_deleted',
@@ -253,10 +280,11 @@ export default function CastingRecords() {
           extracted_grams: Number(casting.extracted_grams),
           status: casting.status,
           metal_type_id: casting.metal_type_id,
-          source_from_inventory_grams: Number((casting as any).source_from_inventory_grams ?? 0),
-          returned_button_grams: Number(casting.returned_button_grams ?? 0),
+          source_from_inventory_grams: sourceFromInventory,
+          returned_button_grams: returnedButton,
           finished_jewelry_grams: Number(casting.finished_jewelry_grams ?? 0),
           sprue_transferred_out: Number(casting.sprue_transferred_to_next_casting_grams ?? 0),
+          stock_adjustment: stockAdjustment,
         },
       });
 
