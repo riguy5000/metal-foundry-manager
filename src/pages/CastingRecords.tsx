@@ -667,6 +667,7 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
         <p>Total: <strong>{extracted.toFixed(2)}g</strong></p>
         {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
         {sprueTrans > 0 && <p className="text-amber-700 dark:text-amber-400">Transferred out: <strong>{sprueTrans.toFixed(2)}g</strong></p>}
+        <p>Remaining to finalize: <strong>{remainingAfterTransfer.toFixed(2)}g</strong></p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
