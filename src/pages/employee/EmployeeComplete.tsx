@@ -57,6 +57,7 @@ export default function EmployeeComplete() {
   const completeMutation = useMutation({
     mutationFn: async () => {
       if (!casting || !user) throw new Error('Missing data');
+      if (overLimit) throw new Error(`Jewelry + Returned (${totalOutput.toFixed(2)}g) exceeds remaining balance (${remainingBalance.toFixed(2)}g)`);
       const totalAccounted = returned + jewelry + alreadyTransferred;
       const difference = extracted - totalAccounted;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
