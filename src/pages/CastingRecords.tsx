@@ -655,7 +655,10 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
   const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
   const fromInv = Number(casting.source_from_inventory_grams ?? 0);
   const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
-  const discrepancy = extracted - sprueTrans - (returned + jewelry);
+  const remainingAfterTransfer = Math.max(0, extracted - sprueTrans);
+  const totalOutputs = returned + jewelry;
+  const overLimit = totalOutputs > remainingAfterTransfer + 0.01;
+  const discrepancy = extracted - sprueTrans - totalOutputs;
   const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
