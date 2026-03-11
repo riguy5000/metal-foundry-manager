@@ -272,7 +272,7 @@ export default function CastingRecords() {
       const casting = selectedCasting;
       if (!casting || !user) throw new Error('Missing data');
 
-      const sourceFromInventory = Number((casting as any).source_from_inventory_grams ?? casting.extracted_grams ?? 0);
+      const sourceFromInventory = Number(casting.source_from_inventory_grams ?? 0);
       const returnedButton = Number(casting.returned_button_grams ?? 0);
       const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
       const isCompleted = casting.status === 'completed' || casting.status === 'flagged';
