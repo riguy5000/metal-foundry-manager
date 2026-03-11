@@ -47,9 +47,12 @@ export default function EmployeeComplete() {
   const returned = parseFloat(returnedGrams) || 0;
   const jewelry = parseFloat(jewelryGrams) || 0;
   const extracted = casting ? Number(casting.extracted_grams) : 0;
-  const alreadyTransferred = casting ? Number((casting as any).sprue_transferred_to_next_casting_grams ?? 0) : 0;
-  const sourceFromOpenCasting = casting ? Number((casting as any).source_from_open_casting_grams ?? 0) : 0;
-  const sourceFromInventory = casting ? Number((casting as any).source_from_inventory_grams ?? 0) : 0;
+  const alreadyTransferred = casting ? Number(casting.sprue_transferred_to_next_casting_grams ?? 0) : 0;
+  const sourceFromOpenCasting = casting ? Number(casting.source_from_open_casting_grams ?? 0) : 0;
+  const sourceFromInventory = casting ? Number(casting.source_from_inventory_grams ?? 0) : 0;
+  const remainingBalance = Math.max(0, extracted - alreadyTransferred);
+  const totalOutput = returned + jewelry;
+  const overLimit = totalOutput > remainingBalance + 0.01; // tiny float tolerance
 
   const completeMutation = useMutation({
     mutationFn: async () => {
