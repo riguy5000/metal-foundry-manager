@@ -177,6 +177,23 @@ export default function EmployeeComplete() {
       <div className="space-y-5">
         <h3 className="text-base font-semibold text-foreground">Final Completion</h3>
 
+        {/* Remaining balance indicator */}
+        {alreadyTransferred > 0 && (
+          <div className="rounded-lg border border-border bg-muted/50 p-3 space-y-1">
+            <div className="text-sm text-muted-foreground">Remaining after transfers</div>
+            <div className="font-mono text-2xl font-bold text-foreground">{remainingBalance.toFixed(2)}g</div>
+            <div className="text-xs text-muted-foreground">
+              {extracted.toFixed(2)}g extracted − {alreadyTransferred.toFixed(2)}g transferred out
+            </div>
+          </div>
+        )}
+
+        {overLimit && (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive font-medium">
+            Jewelry ({jewelry.toFixed(2)}g) + Returned ({returned.toFixed(2)}g) = {totalOutput.toFixed(2)}g exceeds remaining balance of {remainingBalance.toFixed(2)}g
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label className="text-base font-semibold flex items-center gap-2"><Gem className="h-5 w-5 text-primary" /> Finished Jewelry (g)</Label>
           <Input
