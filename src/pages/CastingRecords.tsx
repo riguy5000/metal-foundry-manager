@@ -382,15 +382,20 @@ export default function CastingRecords() {
       if (castError) throw castError;
 
       if (fromInventory > 0) {
-        const newStock = Math.round((available - fromInventory) * 100) / 100;
-        await supabase.from('metal_types').update({ current_stock_grams: newStock }).eq('id', metal.id);
-        await supabase.from('inventory_transactions').insert({
+        await applyMetalStockDelta(metal.id, -fromInventory);
+
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
           metal_type_id: metal.id,
           grams: fromInventory,
           transaction_type: 'extract_for_casting',
           entered_by_user_id: user.id,
           notes: `Casting ${flaskCode} (${fromInventory.toFixed(2)}g from inventory${fromOpenCasting > 0 ? `, ${fromOpenCasting.toFixed(2)}g from open casting` : ''}) — created by admin`,
         });
+
+        if (txError) {
+          await applyMetalStockDelta(metal.id, fromInventory);
+          throw txError;
+        }
       }
 
       if (values.sourceOpenCastingId && fromOpenCasting > 0) {
