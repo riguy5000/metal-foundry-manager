@@ -286,19 +286,19 @@ export default function CastingRecords() {
       const stockAdjustment = sourceFromInventory - (isCompleted ? returnedButton : 0) - sprueTrans;
 
       if (stockAdjustment !== 0) {
-        const metal = metals?.find((m) => m.id === casting.metal_type_id);
-        if (metal) {
-          await supabase.from('metal_types').update({
-            current_stock_grams: Number(metal.current_stock_grams) + stockAdjustment,
-          }).eq('id', casting.metal_type_id);
+        await applyMetalStockDelta(casting.metal_type_id, stockAdjustment);
 
-          await supabase.from('inventory_transactions').insert({
-            metal_type_id: casting.metal_type_id,
-            grams: Math.abs(stockAdjustment),
-            transaction_type: 'manual_adjustment',
-            entered_by_user_id: user.id,
-            notes: `Admin deleted casting ${casting.casting_code} — reversed ${stockAdjustment > 0 ? '+' : ''}${stockAdjustment.toFixed(2)}g to inventory`,
-          });
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
+          metal_type_id: casting.metal_type_id,
+          grams: Math.abs(stockAdjustment),
+          transaction_type: 'manual_adjustment',
+          entered_by_user_id: user.id,
+          notes: `Admin deleted casting ${casting.casting_code} — reversed ${stockAdjustment > 0 ? '+' : ''}${stockAdjustment.toFixed(2)}g to inventory`,
+        });
+
+        if (txError) {
+          await applyMetalStockDelta(casting.metal_type_id, -stockAdjustment);
+          throw txError;
         }
       }
 
