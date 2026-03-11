@@ -679,6 +679,11 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
           <Input type="number" step="0.01" min="0" value={finishedJewelryGrams} onChange={(e) => setFinishedJewelryGrams(e.target.value)} required />
         </div>
       </div>
+      {overLimit && (
+        <div className="rounded-lg p-3 text-sm bg-destructive/10 text-destructive">
+          Returned + Jewelry ({totalOutputs.toFixed(2)}g) exceeds remaining balance ({remainingAfterTransfer.toFixed(2)}g)
+        </div>
+      )}
       {(returned > 0 || jewelry > 0) && (
         <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
           Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
