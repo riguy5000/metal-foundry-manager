@@ -173,7 +173,9 @@ export default function CastingRecords() {
       const oldSprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
       const oldReturned = Number(casting.returned_button_grams) || 0;
       const returnedDelta = returnedButton - oldReturned;
+      const transferDelta = newTransferredOut - oldSprueTrans;
       const totalOutputs = returnedButton + finishedJewelry;
+      const totalInventoryDelta = returnedDelta + transferDelta;
 
       if (newTransferredOut > extracted + 0.01) {
         throw new Error(`Transferred out (${newTransferredOut.toFixed(2)}g) cannot exceed extracted (${extracted.toFixed(2)}g)`);
@@ -184,8 +186,28 @@ export default function CastingRecords() {
         throw new Error(`Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${maxCompletable.toFixed(2)}g)`);
       }
 
-      // Only calculate discrepancy and set final status when the casting is actually being completed
-      // (i.e. has jewelry or returned button values). Otherwise keep it pending/open.
+      // *** VALIDATE INVENTORY FIRST before any DB writes ***
+      if (totalInventoryDelta < 0) {
+        const { data: metalRow, error: metalError } = await supabase
+          .from('metal_types')
+          .select('current_stock_grams')
+          .eq('id', casting.metal_type_id)
+          .maybeSingle();
+        if (metalError) throw metalError;
+        const availableStock = Number(metalRow?.current_stock_grams ?? 0);
+        if (availableStock + totalInventoryDelta < -0.01) {
+          throw new Error(
+            `Cannot save: this change removes ${Math.abs(totalInventoryDelta).toFixed(2)}g from inventory, but only ${availableStock.toFixed(2)}g is available.`
+          );
+        }
+      }
+
+      // *** Apply inventory delta FIRST so if it fails, casting record stays consistent ***
+      if (totalInventoryDelta !== 0) {
+        await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
+      }
+
+      // Now build and save casting record update
       const isBeingCompleted = returnedButton > 0 || finishedJewelry > 0;
       const wasAlreadyCompleted = casting.status === 'completed' || casting.status === 'flagged';
 
@@ -213,14 +235,11 @@ export default function CastingRecords() {
           updatePayload.remaining_unfinalized_balance_grams = 0;
         }
       } else {
-        // Not completing — keep status as pending or open_with_sprue_transfer
         if (newTransferredOut > 0) {
           updatePayload.status = 'open_with_sprue_transfer' as any;
         }
       }
 
-      // If transferred out changed, update it
-      const transferDelta = newTransferredOut - oldSprueTrans;
       if (transferDelta !== 0) {
         updatePayload.sprue_transferred_to_next_casting_grams = newTransferredOut;
         updatePayload.has_sprue_transfer = newTransferredOut > 0;
@@ -230,34 +249,17 @@ export default function CastingRecords() {
         .from('casting_records')
         .update(updatePayload)
         .eq('id', casting.id);
-      if (error) throw error;
 
-      // Calculate total inventory adjustment: returned button delta + transferred out delta
-      // Transferred out metal goes back to inventory (available for new castings)
-      const totalInventoryDelta = returnedDelta + transferDelta;
-
-      // If admin reduces transferred-out grams, inventory may need to be consumed again.
-      // Fail early with a clear message instead of a generic stock error.
-      if (totalInventoryDelta < 0) {
-        const { data: metalRow, error: metalError } = await supabase
-          .from('metal_types')
-          .select('current_stock_grams')
-          .eq('id', casting.metal_type_id)
-          .maybeSingle();
-
-        if (metalError) throw metalError;
-
-        const availableStock = Number(metalRow?.current_stock_grams ?? 0);
-        if (availableStock + totalInventoryDelta < -0.01) {
-          throw new Error(
-            `Cannot save: this change removes ${Math.abs(totalInventoryDelta).toFixed(2)}g from inventory, but only ${availableStock.toFixed(2)}g is available. Keep transferred out at ${oldSprueTrans.toFixed(2)}g or increase returned grams.`
-          );
+      if (error) {
+        // Rollback inventory if casting update fails
+        if (totalInventoryDelta !== 0) {
+          await applyMetalStockDelta(casting.metal_type_id, -totalInventoryDelta);
         }
+        throw error;
       }
 
+      // Log inventory transaction
       if (totalInventoryDelta !== 0) {
-        await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
-
         const parts: string[] = [];
         if (returnedDelta !== 0) parts.push(`returned button ${returnedDelta > 0 ? '+' : ''}${returnedDelta.toFixed(2)}g`);
         if (transferDelta !== 0) parts.push(`transferred out ${transferDelta > 0 ? '+' : ''}${transferDelta.toFixed(2)}g back to inventory`);
@@ -272,12 +274,13 @@ export default function CastingRecords() {
         });
 
         if (txError) {
+          // Rollback both
           await applyMetalStockDelta(casting.metal_type_id, -totalInventoryDelta);
           throw txError;
         }
       }
 
-      // Audit log for the adjustment
+      // Audit log
       await supabase.from('audit_logs').insert({
         action_type: 'admin_casting_adjustment',
         entity_type: 'casting_record',
