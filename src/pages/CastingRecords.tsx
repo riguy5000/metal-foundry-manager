@@ -196,7 +196,7 @@ export default function CastingRecords() {
       };
 
       if (isBeingCompleted || wasAlreadyCompleted) {
-        const totalAccounted = returnedButton + finishedJewelry + newTransferredOut;
+        const totalAccounted = totalOutputs + newTransferredOut;
         const discrepancyGrams = extracted - totalAccounted;
         const discrepancyPercent = (Math.abs(discrepancyGrams) / extracted) * 100;
         const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
