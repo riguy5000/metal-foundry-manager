@@ -751,6 +751,9 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
         {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
         <p>Remaining after transfer: <strong>{remainingAfterTransfer.toFixed(2)}g</strong></p>
         <p className="text-xs text-muted-foreground">
+          Rule for 0 discrepancy: Returned + Jewelry + Xfer Out = Total
+        </p>
+        <p className="text-xs text-muted-foreground">
           Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g · Xfer Out {Number(casting.sprue_transferred_to_next_casting_grams ?? 0).toFixed(2)}g
         </p>
       </div>
@@ -775,6 +778,11 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
             : `Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${remainingAfterTransfer.toFixed(2)}g)`}
         </div>
       )}
+      {insufficientInventory && (
+        <div className="rounded-lg p-3 text-sm bg-destructive/10 text-destructive">
+          Cannot save with Xfer Out {transferredOut.toFixed(2)}g: this change needs {Math.abs(projectedInventoryDelta).toFixed(2)}g from inventory, but only {currentStock.toFixed(2)}g is available.
+        </div>
+      )}
       <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
         Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
         {discrepancyPct > 2 && ' ⚠️ Exceeds tolerance'}
@@ -783,7 +791,7 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
         <Label>Abnormality Note</Label>
         <Textarea value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)} />
       </div>
-      <Button type="submit" className="w-full" disabled={loading || overLimit}>
+      <Button type="submit" className="w-full" disabled={loading || overLimit || insufficientInventory}>
         {loading ? 'Saving...' : 'Save Adjustment'}
       </Button>
     </form>
