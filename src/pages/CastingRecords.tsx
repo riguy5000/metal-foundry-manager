@@ -236,6 +236,25 @@ export default function CastingRecords() {
       // Transferred out metal goes back to inventory (available for new castings)
       const totalInventoryDelta = returnedDelta + transferDelta;
 
+      // If admin reduces transferred-out grams, inventory may need to be consumed again.
+      // Fail early with a clear message instead of a generic stock error.
+      if (totalInventoryDelta < 0) {
+        const { data: metalRow, error: metalError } = await supabase
+          .from('metal_types')
+          .select('current_stock_grams')
+          .eq('id', casting.metal_type_id)
+          .maybeSingle();
+
+        if (metalError) throw metalError;
+
+        const availableStock = Number(metalRow?.current_stock_grams ?? 0);
+        if (availableStock + totalInventoryDelta < -0.01) {
+          throw new Error(
+            `Cannot save: this change removes ${Math.abs(totalInventoryDelta).toFixed(2)}g from inventory, but only ${availableStock.toFixed(2)}g is available. Keep transferred out at ${oldSprueTrans.toFixed(2)}g or increase returned grams.`
+          );
+        }
+      }
+
       if (totalInventoryDelta !== 0) {
         await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
 
