@@ -732,6 +732,11 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
   const extracted = Number(casting.extracted_grams);
   const fromInv = Number(casting.source_from_inventory_grams ?? 0);
   const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
+  const previousTransferredOut = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
+  const previousReturnedButton = Number(casting.returned_button_grams ?? 0);
+  const currentStock = Number((casting.metal_types as any)?.current_stock_grams ?? 0);
+  const projectedInventoryDelta = (returned - previousReturnedButton) + (transferredOut - previousTransferredOut);
+  const insufficientInventory = projectedInventoryDelta < 0 && (currentStock + projectedInventoryDelta) < -0.01;
   const remainingAfterTransfer = Math.max(0, extracted - transferredOut);
   const totalOutputs = returned + jewelry;
   const overTransfer = transferredOut > extracted + 0.01;
