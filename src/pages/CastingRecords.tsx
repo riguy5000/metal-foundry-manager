@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import { generateFlaskCode } from '@/lib/metalUtils';
+import { applyMetalStockDelta } from '@/lib/inventoryUtils';
 
 const statusColor = (status: string) => {
   switch (status) {
