@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { useState } from 'react';
 import { ArrowLeft, ArrowRightLeft, Gem, CircleDot } from 'lucide-react';
 import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
+import { applyMetalStockDelta } from '@/lib/inventoryUtils';
 import { cn } from '@/lib/utils';
 
 export default function EmployeeComplete() {
