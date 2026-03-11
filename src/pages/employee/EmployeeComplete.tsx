@@ -224,7 +224,7 @@ export default function EmployeeComplete() {
 
         <Button
           onClick={() => completeMutation.mutate()}
-          disabled={completeMutation.isPending || (returned <= 0 && jewelry <= 0) || isFinalized}
+          disabled={completeMutation.isPending || (returned <= 0 && jewelry <= 0) || isFinalized || overLimit}
           className="w-full h-14 text-base font-semibold" size="lg"
         >
           {completeMutation.isPending ? 'Saving...' : 'Complete Casting'}
