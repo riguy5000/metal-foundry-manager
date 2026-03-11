@@ -759,7 +759,7 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
         <Label>Abnormality Note</Label>
         <Textarea value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)} />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full" disabled={loading || overLimit}>
         {loading ? 'Saving...' : 'Save Adjustment'}
       </Button>
     </form>
