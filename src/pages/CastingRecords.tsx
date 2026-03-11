@@ -67,7 +67,7 @@ export default function CastingRecords() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('casting_records')
-        .select('*, metal_types(metal_name, karat_label), profiles:extracted_by_user_id(full_name)')
+        .select('*, metal_types(metal_name, karat_label, current_stock_grams), profiles:extracted_by_user_id(full_name)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
