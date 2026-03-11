@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useState, useMemo } from 'react';
 import { ArrowLeft, CheckCircle2, ArrowRightLeft } from 'lucide-react';
 import { getMetalCardClass, getMetalDotClass, generateFlaskCode } from '@/lib/metalUtils';
+import { applyMetalStockDelta } from '@/lib/inventoryUtils';
 import { cn } from '@/lib/utils';
 
 export default function EmployeeExtract() {
@@ -107,12 +108,7 @@ export default function EmployeeExtract() {
 
       // Only subtract the inventory-sourced portion from stock
       if (fromInventory > 0) {
-        const newStock = Math.round((available - fromInventory) * 100) / 100;
-        const { error: stockError } = await supabase
-          .from('metal_types')
-          .update({ current_stock_grams: newStock })
-          .eq('id', metal.id);
-        if (stockError) throw stockError;
+        await applyMetalStockDelta(metal.id, -fromInventory);
 
         const { error: txError } = await supabase.from('inventory_transactions').insert({
           metal_type_id: metal.id,
@@ -121,7 +117,11 @@ export default function EmployeeExtract() {
           entered_by_user_id: user.id,
           notes: `Casting ${flaskCode} (${fromInventory.toFixed(2)}g from inventory${fromOpenCasting > 0 ? `, ${fromOpenCasting.toFixed(2)}g from open casting` : ''})`,
         });
-        if (txError) throw txError;
+
+        if (txError) {
+          await applyMetalStockDelta(metal.id, fromInventory);
+          throw txError;
+        }
       }
 
       // If sourcing from an open casting, update that casting's transferred-out tracking

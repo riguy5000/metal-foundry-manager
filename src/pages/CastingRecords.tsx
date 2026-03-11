@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import { generateFlaskCode } from '@/lib/metalUtils';
+import { applyMetalStockDelta } from '@/lib/inventoryUtils';
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -130,19 +131,20 @@ export default function CastingRecords() {
       if (error) throw error;
 
       if (returnedButton > 0) {
-        const metal = metals?.find((m) => m.id === casting.metal_type_id);
-        if (metal) {
-          await supabase.from('metal_types').update({
-            current_stock_grams: Number(metal.current_stock_grams) + returnedButton,
-          }).eq('id', casting.metal_type_id);
-          await supabase.from('inventory_transactions').insert({
-            metal_type_id: casting.metal_type_id,
-            grams: returnedButton,
-            transaction_type: 'return_from_casting',
-            entered_by_user_id: user!.id,
-            notes: `Return from casting ${casting.casting_code}`,
-            related_casting_id: casting.id,
-          });
+        await applyMetalStockDelta(casting.metal_type_id, returnedButton);
+
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
+          metal_type_id: casting.metal_type_id,
+          grams: returnedButton,
+          transaction_type: 'return_from_casting',
+          entered_by_user_id: user!.id,
+          notes: `Return from casting ${casting.casting_code}`,
+          related_casting_id: casting.id,
+        });
+
+        if (txError) {
+          await applyMetalStockDelta(casting.metal_type_id, -returnedButton);
+          throw txError;
         }
       }
     },
@@ -219,24 +221,24 @@ export default function CastingRecords() {
       const totalInventoryDelta = returnedDelta + transferDelta;
 
       if (totalInventoryDelta !== 0) {
-        const metal = metals?.find((m) => m.id === casting.metal_type_id);
-        if (metal) {
-          await supabase.from('metal_types').update({
-            current_stock_grams: Math.round((Number(metal.current_stock_grams) + totalInventoryDelta) * 100) / 100,
-          }).eq('id', casting.metal_type_id);
+        await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
 
-          const parts: string[] = [];
-          if (returnedDelta !== 0) parts.push(`returned button ${returnedDelta > 0 ? '+' : ''}${returnedDelta.toFixed(2)}g`);
-          if (transferDelta !== 0) parts.push(`transferred out ${transferDelta > 0 ? '+' : ''}${transferDelta.toFixed(2)}g back to inventory`);
+        const parts: string[] = [];
+        if (returnedDelta !== 0) parts.push(`returned button ${returnedDelta > 0 ? '+' : ''}${returnedDelta.toFixed(2)}g`);
+        if (transferDelta !== 0) parts.push(`transferred out ${transferDelta > 0 ? '+' : ''}${transferDelta.toFixed(2)}g back to inventory`);
 
-          await supabase.from('inventory_transactions').insert({
-            metal_type_id: casting.metal_type_id,
-            grams: Math.abs(totalInventoryDelta),
-            transaction_type: 'manual_adjustment',
-            entered_by_user_id: user!.id,
-            notes: `Admin adjustment on casting ${casting.casting_code} (${parts.join(', ')})`,
-            related_casting_id: casting.id,
-          });
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
+          metal_type_id: casting.metal_type_id,
+          grams: Math.abs(totalInventoryDelta),
+          transaction_type: 'manual_adjustment',
+          entered_by_user_id: user!.id,
+          notes: `Admin adjustment on casting ${casting.casting_code} (${parts.join(', ')})`,
+          related_casting_id: casting.id,
+        });
+
+        if (txError) {
+          await applyMetalStockDelta(casting.metal_type_id, -totalInventoryDelta);
+          throw txError;
         }
       }
 
@@ -284,19 +286,19 @@ export default function CastingRecords() {
       const stockAdjustment = sourceFromInventory - (isCompleted ? returnedButton : 0) - sprueTrans;
 
       if (stockAdjustment !== 0) {
-        const metal = metals?.find((m) => m.id === casting.metal_type_id);
-        if (metal) {
-          await supabase.from('metal_types').update({
-            current_stock_grams: Number(metal.current_stock_grams) + stockAdjustment,
-          }).eq('id', casting.metal_type_id);
+        await applyMetalStockDelta(casting.metal_type_id, stockAdjustment);
 
-          await supabase.from('inventory_transactions').insert({
-            metal_type_id: casting.metal_type_id,
-            grams: Math.abs(stockAdjustment),
-            transaction_type: 'manual_adjustment',
-            entered_by_user_id: user.id,
-            notes: `Admin deleted casting ${casting.casting_code} — reversed ${stockAdjustment > 0 ? '+' : ''}${stockAdjustment.toFixed(2)}g to inventory`,
-          });
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
+          metal_type_id: casting.metal_type_id,
+          grams: Math.abs(stockAdjustment),
+          transaction_type: 'manual_adjustment',
+          entered_by_user_id: user.id,
+          notes: `Admin deleted casting ${casting.casting_code} — reversed ${stockAdjustment > 0 ? '+' : ''}${stockAdjustment.toFixed(2)}g to inventory`,
+        });
+
+        if (txError) {
+          await applyMetalStockDelta(casting.metal_type_id, -stockAdjustment);
+          throw txError;
         }
       }
 
@@ -380,15 +382,20 @@ export default function CastingRecords() {
       if (castError) throw castError;
 
       if (fromInventory > 0) {
-        const newStock = Math.round((available - fromInventory) * 100) / 100;
-        await supabase.from('metal_types').update({ current_stock_grams: newStock }).eq('id', metal.id);
-        await supabase.from('inventory_transactions').insert({
+        await applyMetalStockDelta(metal.id, -fromInventory);
+
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
           metal_type_id: metal.id,
           grams: fromInventory,
           transaction_type: 'extract_for_casting',
           entered_by_user_id: user.id,
           notes: `Casting ${flaskCode} (${fromInventory.toFixed(2)}g from inventory${fromOpenCasting > 0 ? `, ${fromOpenCasting.toFixed(2)}g from open casting` : ''}) — created by admin`,
         });
+
+        if (txError) {
+          await applyMetalStockDelta(metal.id, fromInventory);
+          throw txError;
+        }
       }
 
       if (values.sourceOpenCastingId && fromOpenCasting > 0) {
