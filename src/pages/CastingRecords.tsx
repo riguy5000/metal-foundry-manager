@@ -221,24 +221,24 @@ export default function CastingRecords() {
       const totalInventoryDelta = returnedDelta + transferDelta;
 
       if (totalInventoryDelta !== 0) {
-        const metal = metals?.find((m) => m.id === casting.metal_type_id);
-        if (metal) {
-          await supabase.from('metal_types').update({
-            current_stock_grams: Math.round((Number(metal.current_stock_grams) + totalInventoryDelta) * 100) / 100,
-          }).eq('id', casting.metal_type_id);
+        await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
 
-          const parts: string[] = [];
-          if (returnedDelta !== 0) parts.push(`returned button ${returnedDelta > 0 ? '+' : ''}${returnedDelta.toFixed(2)}g`);
-          if (transferDelta !== 0) parts.push(`transferred out ${transferDelta > 0 ? '+' : ''}${transferDelta.toFixed(2)}g back to inventory`);
+        const parts: string[] = [];
+        if (returnedDelta !== 0) parts.push(`returned button ${returnedDelta > 0 ? '+' : ''}${returnedDelta.toFixed(2)}g`);
+        if (transferDelta !== 0) parts.push(`transferred out ${transferDelta > 0 ? '+' : ''}${transferDelta.toFixed(2)}g back to inventory`);
 
-          await supabase.from('inventory_transactions').insert({
-            metal_type_id: casting.metal_type_id,
-            grams: Math.abs(totalInventoryDelta),
-            transaction_type: 'manual_adjustment',
-            entered_by_user_id: user!.id,
-            notes: `Admin adjustment on casting ${casting.casting_code} (${parts.join(', ')})`,
-            related_casting_id: casting.id,
-          });
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
+          metal_type_id: casting.metal_type_id,
+          grams: Math.abs(totalInventoryDelta),
+          transaction_type: 'manual_adjustment',
+          entered_by_user_id: user!.id,
+          notes: `Admin adjustment on casting ${casting.casting_code} (${parts.join(', ')})`,
+          related_casting_id: casting.id,
+        });
+
+        if (txError) {
+          await applyMetalStockDelta(casting.metal_type_id, -totalInventoryDelta);
+          throw txError;
         }
       }
 
