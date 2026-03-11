@@ -67,7 +67,7 @@ export default function CastingRecords() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('casting_records')
-        .select('*, metal_types(metal_name, karat_label), profiles:extracted_by_user_id(full_name)')
+        .select('*, metal_types(metal_name, karat_label, current_stock_grams), profiles:extracted_by_user_id(full_name)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
@@ -235,6 +235,25 @@ export default function CastingRecords() {
       // Calculate total inventory adjustment: returned button delta + transferred out delta
       // Transferred out metal goes back to inventory (available for new castings)
       const totalInventoryDelta = returnedDelta + transferDelta;
+
+      // If admin reduces transferred-out grams, inventory may need to be consumed again.
+      // Fail early with a clear message instead of a generic stock error.
+      if (totalInventoryDelta < 0) {
+        const { data: metalRow, error: metalError } = await supabase
+          .from('metal_types')
+          .select('current_stock_grams')
+          .eq('id', casting.metal_type_id)
+          .maybeSingle();
+
+        if (metalError) throw metalError;
+
+        const availableStock = Number(metalRow?.current_stock_grams ?? 0);
+        if (availableStock + totalInventoryDelta < -0.01) {
+          throw new Error(
+            `Cannot save: this change removes ${Math.abs(totalInventoryDelta).toFixed(2)}g from inventory, but only ${availableStock.toFixed(2)}g is available. Keep transferred out at ${oldSprueTrans.toFixed(2)}g or increase returned grams.`
+          );
+        }
+      }
 
       if (totalInventoryDelta !== 0) {
         await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
@@ -713,6 +732,11 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
   const extracted = Number(casting.extracted_grams);
   const fromInv = Number(casting.source_from_inventory_grams ?? 0);
   const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
+  const previousTransferredOut = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
+  const previousReturnedButton = Number(casting.returned_button_grams ?? 0);
+  const currentStock = Number((casting.metal_types as any)?.current_stock_grams ?? 0);
+  const projectedInventoryDelta = (returned - previousReturnedButton) + (transferredOut - previousTransferredOut);
+  const insufficientInventory = projectedInventoryDelta < 0 && (currentStock + projectedInventoryDelta) < -0.01;
   const remainingAfterTransfer = Math.max(0, extracted - transferredOut);
   const totalOutputs = returned + jewelry;
   const overTransfer = transferredOut > extracted + 0.01;
@@ -726,6 +750,9 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
         <p>Total: <strong>{extracted.toFixed(2)}g</strong></p>
         {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
         <p>Remaining after transfer: <strong>{remainingAfterTransfer.toFixed(2)}g</strong></p>
+        <p className="text-xs text-muted-foreground">
+          Rule for 0 discrepancy: Returned + Jewelry + Xfer Out = Total
+        </p>
         <p className="text-xs text-muted-foreground">
           Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g · Xfer Out {Number(casting.sprue_transferred_to_next_casting_grams ?? 0).toFixed(2)}g
         </p>
@@ -751,6 +778,11 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
             : `Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${remainingAfterTransfer.toFixed(2)}g)`}
         </div>
       )}
+      {insufficientInventory && (
+        <div className="rounded-lg p-3 text-sm bg-destructive/10 text-destructive">
+          Cannot save with Xfer Out {transferredOut.toFixed(2)}g: this change needs {Math.abs(projectedInventoryDelta).toFixed(2)}g from inventory, but only {currentStock.toFixed(2)}g is available.
+        </div>
+      )}
       <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
         Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
         {discrepancyPct > 2 && ' ⚠️ Exceeds tolerance'}
@@ -759,7 +791,7 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
         <Label>Abnormality Note</Label>
         <Textarea value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)} />
       </div>
-      <Button type="submit" className="w-full" disabled={loading || overLimit}>
+      <Button type="submit" className="w-full" disabled={loading || overLimit || insufficientInventory}>
         {loading ? 'Saving...' : 'Save Adjustment'}
       </Button>
     </form>
