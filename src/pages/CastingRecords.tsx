@@ -694,7 +694,7 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
         <Label>Abnormality Note</Label>
         <Textarea value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)} />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full" disabled={loading || overLimit}>
         {loading ? 'Completing...' : 'Complete Casting'}
       </Button>
     </form>
