@@ -744,6 +744,13 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
           <Input type="number" step="0.01" min="0" value={transferredOutGrams} onChange={(e) => setTransferredOutGrams(e.target.value)} />
         </div>
       </div>
+      {overLimit && (
+        <div className="rounded-lg p-3 text-sm bg-destructive/10 text-destructive">
+          {overTransfer
+            ? `Transferred out (${transferredOut.toFixed(2)}g) cannot exceed extracted (${extracted.toFixed(2)}g)`
+            : `Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${remainingAfterTransfer.toFixed(2)}g)`}
+        </div>
+      )}
       <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
         Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
         {discrepancyPct > 2 && ' ⚠️ Exceeds tolerance'}
