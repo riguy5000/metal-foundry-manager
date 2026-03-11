@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useState, useMemo } from 'react';
 import { ArrowLeft, CheckCircle2, ArrowRightLeft } from 'lucide-react';
 import { getMetalCardClass, getMetalDotClass, generateFlaskCode } from '@/lib/metalUtils';
+import { applyMetalStockDelta } from '@/lib/inventoryUtils';
 import { cn } from '@/lib/utils';
 
 export default function EmployeeExtract() {
