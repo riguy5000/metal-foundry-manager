@@ -106,7 +106,13 @@ export default function CastingRecords() {
       const returnedButton = values.returnedButtonGrams;
       const finishedJewelry = values.finishedJewelryGrams;
       const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
-      const totalAccounted = returnedButton + finishedJewelry + sprueTrans;
+      const maxCompletable = Math.max(0, Number(casting.extracted_grams) - sprueTrans);
+      const totalOutputs = returnedButton + finishedJewelry;
+      if (totalOutputs > maxCompletable + 0.01) {
+        throw new Error(`Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${maxCompletable.toFixed(2)}g)`);
+      }
+
+      const totalAccounted = totalOutputs + sprueTrans;
       const discrepancyGrams = Number(casting.extracted_grams) - totalAccounted;
       const discrepancyPercent = (Math.abs(discrepancyGrams) / Number(casting.extracted_grams)) * 100;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
@@ -167,6 +173,16 @@ export default function CastingRecords() {
       const oldSprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
       const oldReturned = Number(casting.returned_button_grams) || 0;
       const returnedDelta = returnedButton - oldReturned;
+      const totalOutputs = returnedButton + finishedJewelry;
+
+      if (newTransferredOut > extracted + 0.01) {
+        throw new Error(`Transferred out (${newTransferredOut.toFixed(2)}g) cannot exceed extracted (${extracted.toFixed(2)}g)`);
+      }
+
+      const maxCompletable = Math.max(0, extracted - newTransferredOut);
+      if (totalOutputs > maxCompletable + 0.01) {
+        throw new Error(`Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${maxCompletable.toFixed(2)}g)`);
+      }
 
       // Only calculate discrepancy and set final status when the casting is actually being completed
       // (i.e. has jewelry or returned button values). Otherwise keep it pending/open.
@@ -180,7 +196,7 @@ export default function CastingRecords() {
       };
 
       if (isBeingCompleted || wasAlreadyCompleted) {
-        const totalAccounted = returnedButton + finishedJewelry + newTransferredOut;
+        const totalAccounted = totalOutputs + newTransferredOut;
         const discrepancyGrams = extracted - totalAccounted;
         const discrepancyPercent = (Math.abs(discrepancyGrams) / extracted) * 100;
         const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
@@ -639,7 +655,10 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
   const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
   const fromInv = Number(casting.source_from_inventory_grams ?? 0);
   const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
-  const discrepancy = extracted - sprueTrans - (returned + jewelry);
+  const remainingAfterTransfer = Math.max(0, extracted - sprueTrans);
+  const totalOutputs = returned + jewelry;
+  const overLimit = totalOutputs > remainingAfterTransfer + 0.01;
+  const discrepancy = extracted - sprueTrans - totalOutputs;
   const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
@@ -648,6 +667,7 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
         <p>Total: <strong>{extracted.toFixed(2)}g</strong></p>
         {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
         {sprueTrans > 0 && <p className="text-amber-700 dark:text-amber-400">Transferred out: <strong>{sprueTrans.toFixed(2)}g</strong></p>}
+        <p>Remaining to finalize: <strong>{remainingAfterTransfer.toFixed(2)}g</strong></p>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -659,6 +679,11 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
           <Input type="number" step="0.01" min="0" value={finishedJewelryGrams} onChange={(e) => setFinishedJewelryGrams(e.target.value)} required />
         </div>
       </div>
+      {overLimit && (
+        <div className="rounded-lg p-3 text-sm bg-destructive/10 text-destructive">
+          Returned + Jewelry ({totalOutputs.toFixed(2)}g) exceeds remaining balance ({remainingAfterTransfer.toFixed(2)}g)
+        </div>
+      )}
       {(returned > 0 || jewelry > 0) && (
         <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
           Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
@@ -669,7 +694,7 @@ function CompleteCastingForm({ casting, onSubmit, loading }: { casting: any; onS
         <Label>Abnormality Note</Label>
         <Textarea value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)} />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full" disabled={loading || overLimit}>
         {loading ? 'Completing...' : 'Complete Casting'}
       </Button>
     </form>
@@ -688,7 +713,11 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
   const extracted = Number(casting.extracted_grams);
   const fromInv = Number(casting.source_from_inventory_grams ?? 0);
   const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
-  const discrepancy = extracted - transferredOut - (returned + jewelry);
+  const remainingAfterTransfer = Math.max(0, extracted - transferredOut);
+  const totalOutputs = returned + jewelry;
+  const overTransfer = transferredOut > extracted + 0.01;
+  const overLimit = overTransfer || totalOutputs > remainingAfterTransfer + 0.01;
+  const discrepancy = extracted - transferredOut - totalOutputs;
   const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
@@ -696,6 +725,7 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
       <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
         <p>Total: <strong>{extracted.toFixed(2)}g</strong></p>
         {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
+        <p>Remaining after transfer: <strong>{remainingAfterTransfer.toFixed(2)}g</strong></p>
         <p className="text-xs text-muted-foreground">
           Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g · Xfer Out {Number(casting.sprue_transferred_to_next_casting_grams ?? 0).toFixed(2)}g
         </p>
@@ -714,6 +744,13 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
           <Input type="number" step="0.01" min="0" value={transferredOutGrams} onChange={(e) => setTransferredOutGrams(e.target.value)} />
         </div>
       </div>
+      {overLimit && (
+        <div className="rounded-lg p-3 text-sm bg-destructive/10 text-destructive">
+          {overTransfer
+            ? `Transferred out (${transferredOut.toFixed(2)}g) cannot exceed extracted (${extracted.toFixed(2)}g)`
+            : `Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${remainingAfterTransfer.toFixed(2)}g)`}
+        </div>
+      )}
       <div className={cn('rounded-lg p-3 text-sm', discrepancyPct > 2 ? 'bg-destructive/10 text-destructive' : 'bg-success/10 text-success')}>
         Discrepancy: {discrepancy.toFixed(2)}g ({discrepancyPct.toFixed(2)}%)
         {discrepancyPct > 2 && ' ⚠️ Exceeds tolerance'}
@@ -722,7 +759,7 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
         <Label>Abnormality Note</Label>
         <Textarea value={abnormalityNote} onChange={(e) => setAbnormalityNote(e.target.value)} />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>
+      <Button type="submit" className="w-full" disabled={loading || overLimit}>
         {loading ? 'Saving...' : 'Save Adjustment'}
       </Button>
     </form>
