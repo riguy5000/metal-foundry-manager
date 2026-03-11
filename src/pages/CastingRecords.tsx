@@ -131,19 +131,20 @@ export default function CastingRecords() {
       if (error) throw error;
 
       if (returnedButton > 0) {
-        const metal = metals?.find((m) => m.id === casting.metal_type_id);
-        if (metal) {
-          await supabase.from('metal_types').update({
-            current_stock_grams: Number(metal.current_stock_grams) + returnedButton,
-          }).eq('id', casting.metal_type_id);
-          await supabase.from('inventory_transactions').insert({
-            metal_type_id: casting.metal_type_id,
-            grams: returnedButton,
-            transaction_type: 'return_from_casting',
-            entered_by_user_id: user!.id,
-            notes: `Return from casting ${casting.casting_code}`,
-            related_casting_id: casting.id,
-          });
+        await applyMetalStockDelta(casting.metal_type_id, returnedButton);
+
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
+          metal_type_id: casting.metal_type_id,
+          grams: returnedButton,
+          transaction_type: 'return_from_casting',
+          entered_by_user_id: user!.id,
+          notes: `Return from casting ${casting.casting_code}`,
+          related_casting_id: casting.id,
+        });
+
+        if (txError) {
+          await applyMetalStockDelta(casting.metal_type_id, -returnedButton);
+          throw txError;
         }
       }
     },
