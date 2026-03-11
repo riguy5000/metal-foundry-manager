@@ -78,10 +78,9 @@ export default function EmployeeComplete() {
       // Return sprue/button to inventory (this is actual metal coming back)
       if (returned > 0) {
         const mt = casting.metal_types as any;
-        await supabase.from('metal_types').update({
-          current_stock_grams: Number(mt.current_stock_grams) + returned,
-        }).eq('id', mt.id);
-        await supabase.from('inventory_transactions').insert({
+        await applyMetalStockDelta(mt.id, returned);
+
+        const { error: txError } = await supabase.from('inventory_transactions').insert({
           metal_type_id: mt.id,
           grams: returned,
           transaction_type: 'return_from_casting',
@@ -89,6 +88,11 @@ export default function EmployeeComplete() {
           notes: `Return from casting ${casting.casting_code}`,
           related_casting_id: casting.id,
         });
+
+        if (txError) {
+          await applyMetalStockDelta(mt.id, -returned);
+          throw txError;
+        }
       }
 
       // Audit log for completion
