@@ -106,7 +106,13 @@ export default function CastingRecords() {
       const returnedButton = values.returnedButtonGrams;
       const finishedJewelry = values.finishedJewelryGrams;
       const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
-      const totalAccounted = returnedButton + finishedJewelry + sprueTrans;
+      const maxCompletable = Math.max(0, Number(casting.extracted_grams) - sprueTrans);
+      const totalOutputs = returnedButton + finishedJewelry;
+      if (totalOutputs > maxCompletable + 0.01) {
+        throw new Error(`Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${maxCompletable.toFixed(2)}g)`);
+      }
+
+      const totalAccounted = totalOutputs + sprueTrans;
       const discrepancyGrams = Number(casting.extracted_grams) - totalAccounted;
       const discrepancyPercent = (Math.abs(discrepancyGrams) / Number(casting.extracted_grams)) * 100;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
