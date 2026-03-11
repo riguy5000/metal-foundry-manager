@@ -173,6 +173,16 @@ export default function CastingRecords() {
       const oldSprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
       const oldReturned = Number(casting.returned_button_grams) || 0;
       const returnedDelta = returnedButton - oldReturned;
+      const totalOutputs = returnedButton + finishedJewelry;
+
+      if (newTransferredOut > extracted + 0.01) {
+        throw new Error(`Transferred out (${newTransferredOut.toFixed(2)}g) cannot exceed extracted (${extracted.toFixed(2)}g)`);
+      }
+
+      const maxCompletable = Math.max(0, extracted - newTransferredOut);
+      if (totalOutputs > maxCompletable + 0.01) {
+        throw new Error(`Returned + Jewelry (${totalOutputs.toFixed(2)}g) exceeds remaining balance (${maxCompletable.toFixed(2)}g)`);
+      }
 
       // Only calculate discrepancy and set final status when the casting is actually being completed
       // (i.e. has jewelry or returned button values). Otherwise keep it pending/open.
