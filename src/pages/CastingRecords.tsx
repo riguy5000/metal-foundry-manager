@@ -713,7 +713,11 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
   const extracted = Number(casting.extracted_grams);
   const fromInv = Number(casting.source_from_inventory_grams ?? 0);
   const fromOpen = Number(casting.source_from_open_casting_grams ?? 0);
-  const discrepancy = extracted - transferredOut - (returned + jewelry);
+  const remainingAfterTransfer = Math.max(0, extracted - transferredOut);
+  const totalOutputs = returned + jewelry;
+  const overTransfer = transferredOut > extracted + 0.01;
+  const overLimit = overTransfer || totalOutputs > remainingAfterTransfer + 0.01;
+  const discrepancy = extracted - transferredOut - totalOutputs;
   const discrepancyPct = extracted > 0 ? (Math.abs(discrepancy) / extracted) * 100 : 0;
 
   return (
