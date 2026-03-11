@@ -725,6 +725,7 @@ function AdjustCastingForm({ casting, onSubmit, loading }: { casting: any; onSub
       <div className="rounded-lg bg-muted p-3 text-sm space-y-1">
         <p>Total: <strong>{extracted.toFixed(2)}g</strong></p>
         {fromOpen > 0 && <p className="text-amber-700 dark:text-amber-400">From open casting: <strong>{fromOpen.toFixed(2)}g</strong> · From inventory: <strong>{fromInv.toFixed(2)}g</strong></p>}
+        <p>Remaining after transfer: <strong>{remainingAfterTransfer.toFixed(2)}g</strong></p>
         <p className="text-xs text-muted-foreground">
           Previous: Button {Number(casting.returned_button_grams ?? 0).toFixed(2)}g · Jewelry {Number(casting.finished_jewelry_grams ?? 0).toFixed(2)}g · Xfer Out {Number(casting.sprue_transferred_to_next_casting_grams ?? 0).toFixed(2)}g
         </p>
