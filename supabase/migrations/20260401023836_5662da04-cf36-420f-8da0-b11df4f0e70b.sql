@@ -1,0 +1,1 @@
+ALTER TYPE public.transaction_type ADD VALUE IF NOT EXISTS 'transfer_from_open_casting_to_stock';

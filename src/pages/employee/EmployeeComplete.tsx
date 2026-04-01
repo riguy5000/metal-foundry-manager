@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { useState } from 'react';
-import { ArrowLeft, ArrowRightLeft, Gem, CircleDot } from 'lucide-react';
+import { ArrowLeft, Gem, CircleDot, ArrowRightLeft } from 'lucide-react';
 import { getMetalCardClass, getMetalEmoji } from '@/lib/metalUtils';
 import { applyMetalStockDelta } from '@/lib/inventoryUtils';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,11 @@ export default function EmployeeComplete() {
   const [jewelryGrams, setJewelryGrams] = useState('');
   const [abnormalityNote, setAbnormalityNote] = useState('');
 
-  const { data: casting } = useQuery({
+  // Transfer state
+  const [transferGrams, setTransferGrams] = useState('');
+  const [transferNote, setTransferNote] = useState('');
+
+  const { data: casting, refetch: refetchCasting } = useQuery({
     queryKey: ['casting_record', castingId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -48,16 +52,88 @@ export default function EmployeeComplete() {
   const jewelry = parseFloat(jewelryGrams) || 0;
   const extracted = casting ? Number(casting.extracted_grams) : 0;
   const alreadyTransferred = casting ? Number(casting.sprue_transferred_to_next_casting_grams ?? 0) : 0;
-  const sourceFromOpenCasting = casting ? Number(casting.source_from_open_casting_grams ?? 0) : 0;
-  const sourceFromInventory = casting ? Number(casting.source_from_inventory_grams ?? 0) : 0;
   const remainingBalance = Math.max(0, extracted - alreadyTransferred);
   const totalOutput = returned + jewelry;
-  const overLimit = totalOutput > remainingBalance + 0.01; // tiny float tolerance
+  const overLimit = totalOutput > remainingBalance + 0.01;
+
+  const transferAmount = parseFloat(transferGrams) || 0;
+  const maxTransferable = remainingBalance;
+  const transferInvalid = transferAmount <= 0 || transferAmount > maxTransferable + 0.01;
+
+  // Transfer mutation — moves metal from open casting back to stock
+  const transferMutation = useMutation({
+    mutationFn: async () => {
+      if (!casting || !user) throw new Error('Missing data');
+      if (transferAmount <= 0) throw new Error('Enter a valid amount');
+      if (transferAmount > maxTransferable + 0.01) throw new Error(`Cannot transfer more than ${maxTransferable.toFixed(2)}g`);
+
+      const isFinalized = casting.status === 'completed' || casting.status === 'flagged';
+      if (isFinalized) throw new Error('Cannot transfer from a finalized casting');
+
+      const mt = casting.metal_types as any;
+      const newTransferred = Math.round((alreadyTransferred + transferAmount) * 100) / 100;
+      const newRemaining = Math.round((extracted - newTransferred) * 100) / 100;
+
+      // Add to inventory
+      await applyMetalStockDelta(mt.id, transferAmount);
+
+      // Log inventory transaction
+      const { error: txError } = await supabase.from('inventory_transactions').insert({
+        metal_type_id: mt.id,
+        grams: transferAmount,
+        transaction_type: 'transfer_from_open_casting_to_stock' as any,
+        entered_by_user_id: user.id,
+        notes: transferNote || `Transfer from casting ${casting.casting_code}`,
+        related_casting_id: casting.id,
+      });
+
+      if (txError) {
+        await applyMetalStockDelta(mt.id, -transferAmount);
+        throw txError;
+      }
+
+      // Update casting record
+      const { error: updateErr } = await supabase.from('casting_records').update({
+        sprue_transferred_to_next_casting_grams: newTransferred,
+        remaining_unfinalized_balance_grams: newRemaining,
+        has_sprue_transfer: true,
+        last_sprue_transfer_at: new Date().toISOString(),
+        sprue_transfer_notes: transferNote || null,
+        status: 'open_with_sprue_transfer' as any,
+      }).eq('id', casting.id);
+
+      if (updateErr) {
+        // Rollback inventory
+        await applyMetalStockDelta(mt.id, -transferAmount);
+        throw updateErr;
+      }
+
+      // Audit
+      await supabase.from('audit_logs').insert({
+        action_type: 'transfer_to_stock',
+        entity_type: 'casting_record',
+        entity_id: casting.id,
+        user_id: user.id,
+        before_json: { transferred_to_stock: alreadyTransferred },
+        after_json: { transferred_to_stock: newTransferred, transfer_amount: transferAmount },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['metal_types'] });
+      queryClient.invalidateQueries({ queryKey: ['my_pending'] });
+      queryClient.invalidateQueries({ queryKey: ['casting_record', castingId] });
+      setTransferGrams('');
+      setTransferNote('');
+      toast.success('Transfer saved — metal returned to stock');
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   const completeMutation = useMutation({
     mutationFn: async () => {
       if (!casting || !user) throw new Error('Missing data');
       if (overLimit) throw new Error(`Jewelry + Returned (${totalOutput.toFixed(2)}g) exceeds remaining balance (${remainingBalance.toFixed(2)}g)`);
+
       const totalAccounted = returned + jewelry + alreadyTransferred;
       const difference = extracted - totalAccounted;
       const tolerance = settings?.default_discrepancy_tolerance_percent ?? 2;
@@ -79,7 +155,7 @@ export default function EmployeeComplete() {
       }).eq('id', casting.id);
       if (error) throw error;
 
-      // Return sprue/button to inventory (this is actual metal coming back)
+      // Return sprue/button to inventory
       if (returned > 0) {
         const mt = casting.metal_types as any;
         await applyMetalStockDelta(mt.id, returned);
@@ -98,24 +174,12 @@ export default function EmployeeComplete() {
           throw txError;
         }
       }
-
-      // Audit log for completion
-      if (alreadyTransferred > 0) {
-        await supabase.from('audit_logs').insert({
-          action_type: 'casting_completed_with_transfer',
-          entity_type: 'casting_record',
-          entity_id: casting.id,
-          user_id: user.id,
-          before_json: { sprue_transferred: alreadyTransferred, extracted: extracted },
-          after_json: { finished_jewelry: jewelry, returned_button: returned, discrepancy: difference },
-        });
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['metal_types'] });
       queryClient.invalidateQueries({ queryKey: ['my_pending'] });
       queryClient.invalidateQueries({ queryKey: ['my_castings'] });
-      toast.success('Casting record saved');
+      toast.success('Casting completed');
       setTimeout(() => navigate('/employee/pending'), 1800);
     },
     onError: (e: any) => toast.error(e.message),
@@ -129,6 +193,7 @@ export default function EmployeeComplete() {
   const cardClass = getMetalCardClass(mt?.color_group ?? '', mt?.metal_family ?? '');
   const emoji = getMetalEmoji(mt?.color_group ?? '', mt?.metal_family ?? '');
   const isFinalized = casting.status === 'completed' || casting.status === 'flagged';
+  const isPending = !isFinalized;
 
   return (
     <div className="p-4 max-w-lg mx-auto">
@@ -150,40 +215,91 @@ export default function EmployeeComplete() {
         <div className="font-mono text-5xl font-bold text-foreground leading-none">
           {extracted.toFixed(2)}
         </div>
-        <div className="text-sm text-muted-foreground mt-1">g total for casting</div>
+        <div className="text-sm text-muted-foreground mt-1">g extracted</div>
 
-        {/* Sourcing breakdown */}
-        {sourceFromOpenCasting > 0 && (
+        {alreadyTransferred > 0 && (
           <div className="mt-3 space-y-1 text-sm">
             <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
               <ArrowRightLeft className="h-3.5 w-3.5" />
-              <span>{sourceFromOpenCasting.toFixed(2)}g from open casting</span>
+              <span>{alreadyTransferred.toFixed(2)}g transferred back to stock</span>
             </div>
-            <div className="text-foreground/70">
-              {sourceFromInventory.toFixed(2)}g from inventory
+            <div className="font-semibold text-foreground">
+              Remaining: {remainingBalance.toFixed(2)}g
             </div>
-          </div>
-        )}
-
-        {alreadyTransferred > 0 && (
-          <div className="mt-2 text-sm font-medium text-foreground/80">
-            <ArrowRightLeft className="h-3.5 w-3.5 inline mr-1" />
-            {alreadyTransferred.toFixed(2)}g transferred out to other castings
           </div>
         )}
       </div>
 
-      {/* Final Completion */}
+      {/* ── TRANSFER SECTION ── visually distinct panel */}
+      {isPending && (
+        <div className="rounded-xl border-2 border-dashed border-sky-500/50 bg-sky-50/60 dark:bg-sky-950/30 p-5 mb-6 space-y-4">
+          <div className="flex items-center gap-2">
+            <ArrowRightLeft className="h-5 w-5 text-sky-600 dark:text-sky-400" />
+            <h3 className="text-base font-semibold text-sky-800 dark:text-sky-300">Transfer Metal to Next Casting</h3>
+          </div>
+          <p className="text-xs text-sky-700 dark:text-sky-400/80">
+            Use this to move clean sprue/spool from this open casting back into stock for the next casting before final cleanup.
+          </p>
+
+          {maxTransferable > 0 ? (
+            <>
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-sky-900 dark:text-sky-200">Transfer Amount (g)</Label>
+                <Input
+                  type="number" step="0.01" min="0.01"
+                  max={maxTransferable}
+                  value={transferGrams}
+                  onChange={(e) => setTransferGrams(e.target.value)}
+                  placeholder="0.00"
+                  className="h-12 text-xl font-mono text-center"
+                  inputMode="decimal"
+                />
+                <p className="text-xs text-sky-700 dark:text-sky-400/80">
+                  Max transferable: <strong className="font-mono">{maxTransferable.toFixed(2)}g</strong>
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-sky-900 dark:text-sky-200">Note <span className="text-muted-foreground">(optional)</span></Label>
+                <Textarea
+                  value={transferNote}
+                  onChange={(e) => setTransferNote(e.target.value)}
+                  placeholder="e.g. Clean sprue cut for next flask"
+                  className="min-h-[60px]"
+                />
+              </div>
+
+              {transferAmount > maxTransferable + 0.01 && (
+                <div className="rounded-lg p-2 text-xs bg-destructive/10 text-destructive">
+                  Exceeds remaining balance of {maxTransferable.toFixed(2)}g
+                </div>
+              )}
+
+              <Button
+                onClick={() => transferMutation.mutate()}
+                disabled={transferMutation.isPending || transferInvalid}
+                variant="outline"
+                className="w-full h-12 text-sm font-semibold border-sky-500/50 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/40"
+              >
+                {transferMutation.isPending ? 'Transferring...' : `Apply Transfer${transferAmount > 0 ? ` — ${transferAmount.toFixed(2)}g` : ''}`}
+              </Button>
+            </>
+          ) : (
+            <p className="text-sm text-sky-700/60 dark:text-sky-400/50">No remaining balance to transfer.</p>
+          )}
+        </div>
+      )}
+
+      {/* ── FINAL COMPLETION ── */}
       <div className="space-y-5">
         <h3 className="text-base font-semibold text-foreground">Final Completion</h3>
 
-        {/* Remaining balance indicator */}
         {alreadyTransferred > 0 && (
           <div className="rounded-lg border border-border bg-muted/50 p-3 space-y-1">
             <div className="text-sm text-muted-foreground">Remaining after transfers</div>
             <div className="font-mono text-2xl font-bold text-foreground">{remainingBalance.toFixed(2)}g</div>
             <div className="text-xs text-muted-foreground">
-              {extracted.toFixed(2)}g extracted − {alreadyTransferred.toFixed(2)}g transferred out
+              {extracted.toFixed(2)}g extracted − {alreadyTransferred.toFixed(2)}g transferred to stock
             </div>
           </div>
         )}

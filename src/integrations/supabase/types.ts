@@ -396,6 +396,7 @@ export type Database = {
         | "return_from_casting"
         | "manual_adjustment"
         | "sprue_transfer_from_open_casting"
+        | "transfer_from_open_casting_to_stock"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -537,6 +538,7 @@ export const Constants = {
         "return_from_casting",
         "manual_adjustment",
         "sprue_transfer_from_open_casting",
+        "transfer_from_open_casting_to_stock",
       ],
     },
   },
