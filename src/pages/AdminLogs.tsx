@@ -263,7 +263,7 @@ export default function AdminLogs() {
         <TabsList>
           <TabsTrigger value="transactions">Transactions ({filteredTransactions.length})</TabsTrigger>
           <TabsTrigger value="casting-summary">Casting Summary ({filteredCastings.length})</TabsTrigger>
-          <TabsTrigger value="audit">Audit ({auditLogs?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="audit">Audit ({filteredAudit.length})</TabsTrigger>
         </TabsList>
 
         {/* ── TRANSACTIONS TAB ── */}
@@ -286,7 +286,7 @@ export default function AdminLogs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTransactions.map((t) => (
+                  {txPag.paginated.map((t) => (
                     <TransactionRow key={t.id} t={t} />
                   ))}
                   {filteredTransactions.length === 0 && (
@@ -296,6 +296,7 @@ export default function AdminLogs() {
                   )}
                 </TableBody>
               </Table>
+              {filteredTransactions.length > 0 && <PaginationBar {...txPag} />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -322,7 +323,7 @@ export default function AdminLogs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCastings.map((c) => (
+                  {castPag.paginated.map((c) => (
                     <CastingSummaryRow key={c.id} c={c} />
                   ))}
                   {filteredCastings.length === 0 && (
@@ -332,6 +333,7 @@ export default function AdminLogs() {
                   )}
                 </TableBody>
               </Table>
+              {filteredCastings.length > 0 && <PaginationBar {...castPag} />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -351,16 +353,17 @@ export default function AdminLogs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {auditLogs?.map((log) => (
+                  {auditPag.paginated.map((log) => (
                     <AuditRow key={log.id} log={log} />
                   ))}
-                  {(!auditLogs || auditLogs.length === 0) && (
+                  {filteredAudit.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">No audit entries</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+              {filteredAudit.length > 0 && <PaginationBar {...auditPag} />}
             </CardContent>
           </Card>
         </TabsContent>
