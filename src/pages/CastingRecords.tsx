@@ -139,15 +139,19 @@ export default function CastingRecords() {
       if (error) throw error;
 
       if (returnedButton > 0) {
-        await applyMetalStockDelta(casting.metal_type_id, returnedButton);
+        const { before: stockBefore, after: stockAfter } = await applyMetalStockDelta(casting.metal_type_id, returnedButton);
         const { error: txError } = await supabase.from('inventory_transactions').insert({
           metal_type_id: casting.metal_type_id,
           grams: returnedButton,
           transaction_type: 'return_from_casting',
           entered_by_user_id: user!.id,
-          notes: `Return from casting ${casting.casting_code}`,
+          notes: `Casting ${casting.casting_code} returned ${returnedButton.toFixed(2)}g button/sprue to stock`,
           related_casting_id: casting.id,
-        });
+          related_casting_code: casting.casting_code,
+          stock_before_grams: stockBefore,
+          stock_after_grams: stockAfter,
+          performed_by_name: user!.email ?? null,
+        } as any);
         if (txError) {
           await applyMetalStockDelta(casting.metal_type_id, -returnedButton);
           throw txError;
@@ -204,8 +208,9 @@ export default function CastingRecords() {
       }
 
       // Apply inventory delta first
+      let stockResult = { before: 0, after: 0 };
       if (totalInventoryDelta !== 0) {
-        await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
+        stockResult = await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
       }
 
       // Build casting update
@@ -269,7 +274,11 @@ export default function CastingRecords() {
           entered_by_user_id: user!.id,
           notes: `Admin adjustment on casting ${casting.casting_code} (${parts.join(', ')})`,
           related_casting_id: casting.id,
-        });
+          related_casting_code: casting.casting_code,
+          stock_before_grams: stockResult.before,
+          stock_after_grams: stockResult.after,
+          performed_by_name: user!.email ?? null,
+        } as any);
 
         if (txError) {
           await applyMetalStockDelta(casting.metal_type_id, -totalInventoryDelta);
@@ -314,7 +323,7 @@ export default function CastingRecords() {
       const stockAdjustment = extracted - (isCompleted ? returnedButton : 0) - sprueTrans;
 
       if (stockAdjustment !== 0) {
-        await applyMetalStockDelta(casting.metal_type_id, stockAdjustment);
+        const { before: stockBefore, after: stockAfter } = await applyMetalStockDelta(casting.metal_type_id, stockAdjustment);
 
         const { error: txError } = await supabase.from('inventory_transactions').insert({
           metal_type_id: casting.metal_type_id,
@@ -322,7 +331,11 @@ export default function CastingRecords() {
           transaction_type: 'manual_adjustment',
           entered_by_user_id: user.id,
           notes: `Admin deleted casting ${casting.casting_code} — reversed ${stockAdjustment > 0 ? '+' : ''}${stockAdjustment.toFixed(2)}g to inventory`,
-        });
+          related_casting_code: casting.casting_code,
+          stock_before_grams: stockBefore,
+          stock_after_grams: stockAfter,
+          performed_by_name: user.email ?? null,
+        } as any);
 
         if (txError) {
           await applyMetalStockDelta(casting.metal_type_id, -stockAdjustment);
@@ -394,15 +407,19 @@ export default function CastingRecords() {
       } as any);
       if (castError) throw castError;
 
-      await applyMetalStockDelta(metal.id, -values.totalGrams);
+      const { before: stockBefore, after: stockAfter } = await applyMetalStockDelta(metal.id, -values.totalGrams);
 
       const { error: txError } = await supabase.from('inventory_transactions').insert({
         metal_type_id: metal.id,
         grams: values.totalGrams,
         transaction_type: 'extract_for_casting',
         entered_by_user_id: user.id,
-        notes: `Casting ${flaskCode} — ${values.totalGrams.toFixed(2)}g extracted (admin)`,
-      });
+        notes: `Casting ${flaskCode} extracted ${values.totalGrams.toFixed(2)}g from stock (admin)`,
+        related_casting_code: flaskCode,
+        stock_before_grams: stockBefore,
+        stock_after_grams: stockAfter,
+        performed_by_name: user.email ?? null,
+      } as any);
 
       if (txError) {
         await applyMetalStockDelta(metal.id, values.totalGrams);

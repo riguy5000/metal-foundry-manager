@@ -63,20 +63,24 @@ export default function MetalInventory() {
 
   const adjustStockMutation = useMutation({
     mutationFn: async ({ metalId, grams, type, notes }: any) => {
+      const metal = metals?.find((m) => m.id === metalId);
+      if (!metal) throw new Error('Metal not found');
+
+      const delta = type === 'add_stock' ? Math.abs(grams) : -Math.abs(grams);
+      const stockBefore = Number(metal.current_stock_grams);
+      const newStock = stockBefore + delta;
+
       const { error: txError } = await supabase.from('inventory_transactions').insert({
         metal_type_id: metalId,
         grams: Math.abs(grams),
         transaction_type: type,
         entered_by_user_id: user!.id,
         notes,
-      });
+        stock_before_grams: stockBefore,
+        stock_after_grams: Math.round(newStock * 100) / 100,
+        performed_by_name: user?.email ?? null,
+      } as any);
       if (txError) throw txError;
-
-      const metal = metals?.find((m) => m.id === metalId);
-      if (!metal) throw new Error('Metal not found');
-
-      const delta = type === 'add_stock' ? Math.abs(grams) : -Math.abs(grams);
-      const newStock = Number(metal.current_stock_grams) + delta;
 
       const { error: updateError } = await supabase
         .from('metal_types')
