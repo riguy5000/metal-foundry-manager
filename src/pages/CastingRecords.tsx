@@ -407,15 +407,19 @@ export default function CastingRecords() {
       } as any);
       if (castError) throw castError;
 
-      await applyMetalStockDelta(metal.id, -values.totalGrams);
+      const { before: stockBefore, after: stockAfter } = await applyMetalStockDelta(metal.id, -values.totalGrams);
 
       const { error: txError } = await supabase.from('inventory_transactions').insert({
         metal_type_id: metal.id,
         grams: values.totalGrams,
         transaction_type: 'extract_for_casting',
         entered_by_user_id: user.id,
-        notes: `Casting ${flaskCode} — ${values.totalGrams.toFixed(2)}g extracted (admin)`,
-      });
+        notes: `Casting ${flaskCode} extracted ${values.totalGrams.toFixed(2)}g from stock (admin)`,
+        related_casting_code: flaskCode,
+        stock_before_grams: stockBefore,
+        stock_after_grams: stockAfter,
+        performed_by_name: user.email ?? null,
+      } as any);
 
       if (txError) {
         await applyMetalStockDelta(metal.id, values.totalGrams);
