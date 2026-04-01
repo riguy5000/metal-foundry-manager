@@ -208,8 +208,9 @@ export default function CastingRecords() {
       }
 
       // Apply inventory delta first
+      let stockResult = { before: 0, after: 0 };
       if (totalInventoryDelta !== 0) {
-        await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
+        stockResult = await applyMetalStockDelta(casting.metal_type_id, totalInventoryDelta);
       }
 
       // Build casting update
