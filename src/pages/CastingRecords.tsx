@@ -323,7 +323,7 @@ export default function CastingRecords() {
       const stockAdjustment = extracted - (isCompleted ? returnedButton : 0) - sprueTrans;
 
       if (stockAdjustment !== 0) {
-        await applyMetalStockDelta(casting.metal_type_id, stockAdjustment);
+        const { before: stockBefore, after: stockAfter } = await applyMetalStockDelta(casting.metal_type_id, stockAdjustment);
 
         const { error: txError } = await supabase.from('inventory_transactions').insert({
           metal_type_id: casting.metal_type_id,
@@ -331,7 +331,11 @@ export default function CastingRecords() {
           transaction_type: 'manual_adjustment',
           entered_by_user_id: user.id,
           notes: `Admin deleted casting ${casting.casting_code} — reversed ${stockAdjustment > 0 ? '+' : ''}${stockAdjustment.toFixed(2)}g to inventory`,
-        });
+          related_casting_code: casting.casting_code,
+          stock_before_grams: stockBefore,
+          stock_after_grams: stockAfter,
+          performed_by_name: user.email ?? null,
+        } as any);
 
         if (txError) {
           await applyMetalStockDelta(casting.metal_type_id, -stockAdjustment);
