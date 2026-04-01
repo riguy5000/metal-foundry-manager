@@ -9,8 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { format } from 'date-fns';
-import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, ArrowDown, ArrowUp, Minus } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { ChevronDown, ChevronRight, ArrowDown, ArrowUp, Minus, ChevronLeft as ChevLeft, ChevronRight as ChevRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const typeLabels: Record<string, string> = {
@@ -64,6 +65,44 @@ function getSignedChange(t: any): number {
     return grams;
   }
   return grams;
+}
+
+const ROWS_PER_PAGE_OPTIONS = [25, 50, 100];
+
+function usePagination<T>(items: T[], defaultPerPage = 25) {
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(defaultPerPage);
+  const totalPages = Math.max(1, Math.ceil(items.length / perPage));
+  const safeP = Math.min(page, totalPages);
+  const paginated = items.slice((safeP - 1) * perPage, safeP * perPage);
+  const reset = useCallback(() => setPage(1), []);
+  return { page: safeP, setPage, perPage, setPerPage, totalPages, paginated, total: items.length, reset };
+}
+
+function PaginationBar({ page, totalPages, total, perPage, setPage, setPerPage }: ReturnType<typeof usePagination>) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span>Rows:</span>
+        <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1); }}>
+          <SelectTrigger className="h-8 w-[70px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {ROWS_PER_PAGE_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <span className="ml-2">{total} total</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-8 w-8 p-0">
+          <ChevLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm px-2">{page} / {totalPages}</span>
+        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-8 w-8 p-0">
+          <ChevRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminLogs() {
@@ -152,6 +191,16 @@ export default function AdminLogs() {
     });
   }, [castings, fromDate, toDate, filterMetal, filterCastingStatus, filterCode]);
 
+  const filteredAudit = useMemo(() => auditLogs ?? [], [auditLogs]);
+
+  const txPag = usePagination(filteredTransactions);
+  const castPag = usePagination(filteredCastings);
+  const auditPag = usePagination(filteredAudit);
+
+  // Reset pages when filters change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useMemo(() => { txPag.reset(); castPag.reset(); auditPag.reset(); }, [fromDate, toDate, filterMetal, filterType, filterCode, filterCastingStatus]);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Logs</h1>
@@ -214,7 +263,7 @@ export default function AdminLogs() {
         <TabsList>
           <TabsTrigger value="transactions">Transactions ({filteredTransactions.length})</TabsTrigger>
           <TabsTrigger value="casting-summary">Casting Summary ({filteredCastings.length})</TabsTrigger>
-          <TabsTrigger value="audit">Audit ({auditLogs?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="audit">Audit ({filteredAudit.length})</TabsTrigger>
         </TabsList>
 
         {/* ── TRANSACTIONS TAB ── */}
@@ -237,7 +286,7 @@ export default function AdminLogs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTransactions.map((t) => (
+                  {txPag.paginated.map((t) => (
                     <TransactionRow key={t.id} t={t} />
                   ))}
                   {filteredTransactions.length === 0 && (
@@ -247,6 +296,7 @@ export default function AdminLogs() {
                   )}
                 </TableBody>
               </Table>
+              {filteredTransactions.length > 0 && <PaginationBar {...txPag} />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -273,7 +323,7 @@ export default function AdminLogs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCastings.map((c) => (
+                  {castPag.paginated.map((c) => (
                     <CastingSummaryRow key={c.id} c={c} />
                   ))}
                   {filteredCastings.length === 0 && (
@@ -283,6 +333,7 @@ export default function AdminLogs() {
                   )}
                 </TableBody>
               </Table>
+              {filteredCastings.length > 0 && <PaginationBar {...castPag} />}
             </CardContent>
           </Card>
         </TabsContent>
@@ -302,16 +353,17 @@ export default function AdminLogs() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {auditLogs?.map((log) => (
+                  {auditPag.paginated.map((log) => (
                     <AuditRow key={log.id} log={log} />
                   ))}
-                  {(!auditLogs || auditLogs.length === 0) && (
+                  {filteredAudit.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">No audit entries</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
               </Table>
+              {filteredAudit.length > 0 && <PaginationBar {...auditPag} />}
             </CardContent>
           </Card>
         </TabsContent>
