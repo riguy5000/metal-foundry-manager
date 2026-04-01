@@ -67,6 +67,44 @@ function getSignedChange(t: any): number {
   return grams;
 }
 
+const ROWS_PER_PAGE_OPTIONS = [25, 50, 100];
+
+function usePagination<T>(items: T[], defaultPerPage = 25) {
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(defaultPerPage);
+  const totalPages = Math.max(1, Math.ceil(items.length / perPage));
+  const safeP = Math.min(page, totalPages);
+  const paginated = items.slice((safeP - 1) * perPage, safeP * perPage);
+  const reset = useCallback(() => setPage(1), []);
+  return { page: safeP, setPage, perPage, setPerPage, totalPages, paginated, total: items.length, reset };
+}
+
+function PaginationBar({ page, totalPages, total, perPage, setPage, setPerPage }: ReturnType<typeof usePagination>) {
+  return (
+    <div className="flex items-center justify-between px-4 py-3 border-t">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <span>Rows:</span>
+        <Select value={String(perPage)} onValueChange={(v) => { setPerPage(Number(v)); setPage(1); }}>
+          <SelectTrigger className="h-8 w-[70px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {ROWS_PER_PAGE_OPTIONS.map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <span className="ml-2">{total} total</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)} className="h-8 w-8 p-0">
+          <ChevLeft className="h-4 w-4" />
+        </Button>
+        <span className="text-sm px-2">{page} / {totalPages}</span>
+        <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="h-8 w-8 p-0">
+          <ChevRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminLogs() {
   // Filters
   const [fromDate, setFromDate] = useState('');
