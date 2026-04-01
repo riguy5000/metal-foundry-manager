@@ -274,7 +274,11 @@ export default function CastingRecords() {
           entered_by_user_id: user!.id,
           notes: `Admin adjustment on casting ${casting.casting_code} (${parts.join(', ')})`,
           related_casting_id: casting.id,
-        });
+          related_casting_code: casting.casting_code,
+          stock_before_grams: stockResult.before,
+          stock_after_grams: stockResult.after,
+          performed_by_name: user!.email ?? null,
+        } as any);
 
         if (txError) {
           await applyMetalStockDelta(casting.metal_type_id, -totalInventoryDelta);
