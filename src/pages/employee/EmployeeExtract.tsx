@@ -69,15 +69,19 @@ export default function EmployeeExtract() {
       if (castError) throw castError;
 
       // Deduct from stock
-      await applyMetalStockDelta(metal.id, -totalGrams);
+      const { before: stockBefore, after: stockAfter } = await applyMetalStockDelta(metal.id, -totalGrams);
 
       const { error: txError } = await supabase.from('inventory_transactions').insert({
         metal_type_id: metal.id,
         grams: totalGrams,
         transaction_type: 'extract_for_casting',
         entered_by_user_id: user.id,
-        notes: `Casting ${flaskCode} — ${totalGrams.toFixed(2)}g extracted`,
-      });
+        notes: `Casting ${flaskCode} extracted ${totalGrams.toFixed(2)}g from stock`,
+        related_casting_code: flaskCode,
+        stock_before_grams: stockBefore,
+        stock_after_grams: stockAfter,
+        performed_by_name: user.email ?? null,
+      } as any);
 
       if (txError) {
         await applyMetalStockDelta(metal.id, totalGrams);
