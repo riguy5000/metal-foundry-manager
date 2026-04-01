@@ -50,9 +50,9 @@ function normalizeColorGroup(color: string): string {
 
 function getShortName(metalName: string, colorGroup: string, metalFamily: string): string {
   if (metalFamily !== 'Gold') return metalName;
-  // For gold: show "10K Yellow", "14K Red", etc.
+  // For gold: show "10K Rose", "14K Red", etc. — use the actual color_group
   const karat = metalName.match(/^\d+K/)?.[0] ?? '';
-  const color = (colorGroup === 'Red' || colorGroup === 'Rose') ? 'Red' : colorGroup;
+  const color = colorGroup || 'Yellow';
   return `${karat} ${color}`;
 }
 
