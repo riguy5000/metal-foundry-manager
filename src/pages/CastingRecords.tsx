@@ -139,15 +139,19 @@ export default function CastingRecords() {
       if (error) throw error;
 
       if (returnedButton > 0) {
-        await applyMetalStockDelta(casting.metal_type_id, returnedButton);
+        const { before: stockBefore, after: stockAfter } = await applyMetalStockDelta(casting.metal_type_id, returnedButton);
         const { error: txError } = await supabase.from('inventory_transactions').insert({
           metal_type_id: casting.metal_type_id,
           grams: returnedButton,
           transaction_type: 'return_from_casting',
           entered_by_user_id: user!.id,
-          notes: `Return from casting ${casting.casting_code}`,
+          notes: `Casting ${casting.casting_code} returned ${returnedButton.toFixed(2)}g button/sprue to stock`,
           related_casting_id: casting.id,
-        });
+          related_casting_code: casting.casting_code,
+          stock_before_grams: stockBefore,
+          stock_after_grams: stockAfter,
+          performed_by_name: user!.email ?? null,
+        } as any);
         if (txError) {
           await applyMetalStockDelta(casting.metal_type_id, -returnedButton);
           throw txError;
