@@ -9,8 +9,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { format } from 'date-fns';
-import { useState, useMemo } from 'react';
-import { ChevronDown, ChevronRight, ArrowDown, ArrowUp, Minus } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { ChevronDown, ChevronRight, ArrowDown, ArrowUp, Minus, ChevronLeft as ChevLeft, ChevronRight as ChevRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 const typeLabels: Record<string, string> = {

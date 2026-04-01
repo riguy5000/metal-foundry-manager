@@ -240,41 +240,27 @@ export default function EmployeeComplete() {
 
       {/* ── TRANSFER SECTION ── visually distinct panel */}
       {isPending && (
-        <div className="rounded-xl border-2 border-dashed border-sky-500/50 bg-sky-50/60 dark:bg-sky-950/30 p-5 mb-6 space-y-4">
+      <div className="rounded-xl border-2 border-dashed border-sky-500/50 bg-sky-50/60 dark:bg-sky-950/30 p-4 mb-6 space-y-3">
           <div className="flex items-center gap-2">
             <ArrowRightLeft className="h-5 w-5 text-sky-600 dark:text-sky-400" />
             <h3 className="text-base font-semibold text-sky-800 dark:text-sky-300">Transfer Metal to Next Casting</h3>
           </div>
-          <p className="text-xs text-sky-700 dark:text-sky-400/80">
-            Use this to move clean sprue/spool from this open casting back into stock for the next casting before final cleanup.
-          </p>
 
           {maxTransferable > 0 ? (
             <>
-              <div className="space-y-2">
-                <Label className="text-sm font-medium text-sky-900 dark:text-sky-200">Transfer Amount (g)</Label>
-                <Input
-                  type="number" step="0.01" min="0.01"
-                  max={maxTransferable}
-                  value={transferGrams}
-                  onChange={(e) => setTransferGrams(e.target.value)}
-                  placeholder="0.00"
-                  className="h-12 text-xl font-mono text-center"
-                  inputMode="decimal"
-                />
-                <p className="text-xs text-sky-700 dark:text-sky-400/80">
-                  Max transferable: <strong className="font-mono">{maxTransferable.toFixed(2)}g</strong>
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-sky-900 dark:text-sky-200">Note <span className="text-muted-foreground">(optional)</span></Label>
-                <Textarea
-                  value={transferNote}
-                  onChange={(e) => setTransferNote(e.target.value)}
-                  placeholder="e.g. Clean sprue cut for next flask"
-                  className="min-h-[60px]"
-                />
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number" step="0.01" min="0.01"
+                    max={maxTransferable}
+                    value={transferGrams}
+                    onChange={(e) => setTransferGrams(e.target.value)}
+                    placeholder="0.00"
+                    className="h-12 text-xl font-mono text-center flex-1"
+                    inputMode="decimal"
+                  />
+                  <span className="text-xs text-sky-700 dark:text-sky-400/80 whitespace-nowrap">/ {maxTransferable.toFixed(2)}g</span>
+                </div>
               </div>
 
               {transferAmount > maxTransferable + 0.01 && (
