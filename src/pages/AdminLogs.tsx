@@ -191,6 +191,16 @@ export default function AdminLogs() {
     });
   }, [castings, fromDate, toDate, filterMetal, filterCastingStatus, filterCode]);
 
+  const filteredAudit = useMemo(() => auditLogs ?? [], [auditLogs]);
+
+  const txPag = usePagination(filteredTransactions);
+  const castPag = usePagination(filteredCastings);
+  const auditPag = usePagination(filteredAudit);
+
+  // Reset pages when filters change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useMemo(() => { txPag.reset(); castPag.reset(); auditPag.reset(); }, [fromDate, toDate, filterMetal, filterType, filterCode, filterCastingStatus]);
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Logs</h1>
