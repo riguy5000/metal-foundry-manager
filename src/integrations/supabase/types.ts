@@ -177,7 +177,11 @@ export type Database = {
           id: string
           metal_type_id: string
           notes: string | null
+          performed_by_name: string | null
+          related_casting_code: string | null
           related_casting_id: string | null
+          stock_after_grams: number | null
+          stock_before_grams: number | null
           timestamp: string
           transaction_type: Database["public"]["Enums"]["transaction_type"]
         }
@@ -188,7 +192,11 @@ export type Database = {
           id?: string
           metal_type_id: string
           notes?: string | null
+          performed_by_name?: string | null
+          related_casting_code?: string | null
           related_casting_id?: string | null
+          stock_after_grams?: number | null
+          stock_before_grams?: number | null
           timestamp?: string
           transaction_type: Database["public"]["Enums"]["transaction_type"]
         }
@@ -199,7 +207,11 @@ export type Database = {
           id?: string
           metal_type_id?: string
           notes?: string | null
+          performed_by_name?: string | null
+          related_casting_code?: string | null
           related_casting_id?: string | null
+          stock_after_grams?: number | null
+          stock_before_grams?: number | null
           timestamp?: string
           transaction_type?: Database["public"]["Enums"]["transaction_type"]
         }
