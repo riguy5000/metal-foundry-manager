@@ -505,6 +505,7 @@ export default function CastingRecords() {
                 <TableHead className="text-right">Jewelry</TableHead>
                 <TableHead className="text-right">Returned</TableHead>
                 <TableHead className="text-right">Disc. %</TableHead>
+                <TableHead className="text-right">Disc. G</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>By</TableHead>
                 <TableHead className="w-20"></TableHead>
