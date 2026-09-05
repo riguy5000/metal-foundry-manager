@@ -539,6 +539,13 @@ export default function CastingRecords() {
                         </span>
                       ) : '—'}
                     </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {c.discrepancy_grams != null ? (
+                        <span className={cn(Math.abs(Number(c.discrepancy_percent ?? 0)) > 2 ? 'text-destructive font-bold' : '')}>
+                          {Number(c.discrepancy_grams).toFixed(2)}g
+                        </span>
+                      ) : '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn('text-[10px]', statusColor(c.status))}>
                         {statusLabel(c.status)}
