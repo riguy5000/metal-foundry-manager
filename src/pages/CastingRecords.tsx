@@ -505,6 +505,7 @@ export default function CastingRecords() {
                 <TableHead className="text-right">Jewelry</TableHead>
                 <TableHead className="text-right">Returned</TableHead>
                 <TableHead className="text-right">Disc. %</TableHead>
+                <TableHead className="text-right">Disc. G</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>By</TableHead>
                 <TableHead className="w-20"></TableHead>
@@ -535,6 +536,13 @@ export default function CastingRecords() {
                       {c.discrepancy_percent != null ? (
                         <span className={cn(Math.abs(Number(c.discrepancy_percent)) > 2 ? 'text-destructive font-bold' : '')}>
                           {Number(c.discrepancy_percent).toFixed(1)}%
+                        </span>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-mono text-sm">
+                      {c.discrepancy_grams != null ? (
+                        <span className={cn(Math.abs(Number(c.discrepancy_percent ?? 0)) > 2 ? 'text-destructive font-bold' : '')}>
+                          {Number(c.discrepancy_grams).toFixed(2)}g
                         </span>
                       ) : '—'}
                     </TableCell>
