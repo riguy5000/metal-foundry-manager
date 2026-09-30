@@ -547,6 +547,9 @@ export default function CastingRecords() {
                         </span>
                       ) : '—'}
                     </TableCell>
+                    <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                      {isCompleted ? `${Number(c.extracted_grams).toFixed(2)}g` : '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn('text-[10px]', statusColor(c.status))}>
                         {statusLabel(c.status)}
@@ -578,7 +581,7 @@ export default function CastingRecords() {
               })}
               {filteredCastings.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">No casting records</TableCell>
+                  <TableCell colSpan={12} className="text-center text-muted-foreground py-8">No casting records</TableCell>
                 </TableRow>
               )}
             </TableBody>
