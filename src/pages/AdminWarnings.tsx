@@ -119,6 +119,7 @@ export default function AdminWarnings() {
                     <TableHead>Metal</TableHead>
                     <TableHead className="text-right">Disc. %</TableHead>
                     <TableHead className="text-right">Lost (g)</TableHead>
+                    <TableHead className="text-right">Casting Wt</TableHead>
                     <TableHead>Employee</TableHead>
                     <TableHead>Date</TableHead>
                   </TableRow>
@@ -136,6 +137,9 @@ export default function AdminWarnings() {
                         </TableCell>
                         <TableCell className="text-right font-mono text-sm">
                           {Number(c.discrepancy_grams).toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {Number(c.extracted_grams).toFixed(2)}g
                         </TableCell>
                         <TableCell className="text-sm">{profile?.full_name ?? '—'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
