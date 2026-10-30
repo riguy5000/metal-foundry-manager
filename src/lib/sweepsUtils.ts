@@ -8,6 +8,10 @@ export interface SweepCasting {
 
 const round = (value: number) => Math.round(value * 100) / 100;
 
+export function isSweepsFamilyMatch(castingFamily: string | null | undefined, bagFamily: string) {
+  return castingFamily === bagFamily;
+}
+
 export function reconcileSweeps(casting: SweepCasting, credited = 0) {
   const original = round(Number(casting.extracted_grams) - Number(casting.sprue_transferred_to_next_casting_grams ?? 0)
     - Number(casting.finished_jewelry_grams ?? 0) - Number(casting.returned_button_grams ?? 0));

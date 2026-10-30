@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSweepsCredits } from '@/hooks/useSweeps';
-import { allocateSweeps, reconcileSweeps } from '@/lib/sweepsUtils';
+import { allocateSweeps, isSweepsFamilyMatch, reconcileSweeps } from '@/lib/sweepsUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,7 +35,7 @@ export default function AdminSweeps() {
     if (error) throw error;
     return data;
   } });
-  const eligible = (castings.data ?? []).filter(c => c.metal_types?.metal_family === family
+  const eligible = (castings.data ?? []).filter(c => isSweepsFamilyMatch(c.metal_types?.metal_family, family)
     && (!date || format(new Date(c.extracted_at), 'yyyy-MM-dd') === date));
   const chosen = eligible.filter(c => selected.includes(c.id));
   const amount = Number(grams);

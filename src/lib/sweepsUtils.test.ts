@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { allocateSweeps, reconcileSweeps } from './sweepsUtils';
+import { allocateSweeps, isSweepsFamilyMatch, reconcileSweeps } from './sweepsUtils';
 
 describe('sweeps reconciliation', () => {
+  it('keeps silver and platinum bags separate from mixed gold', () => {
+    expect(isSweepsFamilyMatch('Gold', 'Gold')).toBe(true);
+    expect(isSweepsFamilyMatch('Silver', 'Gold')).toBe(false);
+    expect(isSweepsFamilyMatch('Platinum', 'Gold')).toBe(false);
+    expect(isSweepsFamilyMatch('Gold', 'Platinum')).toBe(false);
+  });
   it('balances losses of 1g, 2g and 3g with one 6g bag', () => {
     const result = allocateSweeps([{ id: 'a', grams: 1 }, { id: 'b', grams: 2 }, { id: 'c', grams: 3 }], 6);
     expect(Object.fromEntries(result.allocations.map(a => [a.id, a.grams]))).toEqual({ a: 1, b: 2, c: 3 });
