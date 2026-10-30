@@ -314,6 +314,12 @@ export default function CastingRecords() {
       const casting = selectedCasting;
       if (!casting || !user) throw new Error('Missing data');
 
+      // Check protected receipt history before any stock reversal takes place.
+      const { data: sweepLinks, error: sweepsError } = await supabase.from('sweeps_allocations')
+        .select('id').eq('casting_id', casting.id).limit(1);
+      if (sweepsError) throw sweepsError;
+      if (sweepLinks?.length) throw new Error('This casting has sweeps receipt history and cannot be deleted. Adjust the casting or void an incorrect receipt instead.');
+
       const extracted = Number(casting.extracted_grams);
       const returnedButton = Number(casting.returned_button_grams ?? 0);
       const sprueTrans = Number(casting.sprue_transferred_to_next_casting_grams ?? 0);
