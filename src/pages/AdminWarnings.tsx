@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { getMetalDotClass } from '@/lib/metalUtils';
 import { cn } from '@/lib/utils';
+import { useSweepsCredits } from '@/hooks/useSweeps';
+import { reconcileSweeps } from '@/lib/sweepsUtils';
 
 function getSeverity(current: number, threshold: number) {
   if (current <= 0) return { label: 'Critical', className: 'bg-destructive text-destructive-foreground' };
@@ -16,6 +18,7 @@ function getSeverity(current: number, threshold: number) {
 }
 
 export default function AdminWarnings() {
+  const { credits: sweepsCredits } = useSweepsCredits();
   const { data: metals } = useQuery({
     queryKey: ['metal_types'],
     queryFn: async () => {
@@ -120,6 +123,10 @@ export default function AdminWarnings() {
                     <TableHead className="text-right">Disc. %</TableHead>
                     <TableHead className="text-right">Lost (g)</TableHead>
                     <TableHead className="text-right">Casting Wt</TableHead>
+                    <TableHead className="text-right">Sweeps (g)</TableHead>
+                    <TableHead className="text-right">After Sweeps (g)</TableHead>
+                    <TableHead className="text-right">After Sweeps %</TableHead>
+                    <TableHead>Sweeps balance</TableHead>
                     <TableHead>Employee</TableHead>
                     <TableHead>Date</TableHead>
                   </TableRow>
@@ -128,6 +135,7 @@ export default function AdminWarnings() {
                   {flaggedCastings.map((c) => {
                     const mt = c.metal_types as any;
                     const profile = c.profiles as any;
+                    const loss = reconcileSweeps(c, sweepsCredits[c.id]);
                     return (
                       <TableRow key={c.id}>
                         <TableCell className="font-mono text-sm">{c.casting_code}</TableCell>
@@ -141,6 +149,10 @@ export default function AdminWarnings() {
                         <TableCell className="text-right font-mono text-sm">
                           {Number(c.extracted_grams).toFixed(2)}g
                         </TableCell>
+                        <TableCell className="text-right font-mono text-sm">{loss.credited.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{loss.remaining.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">{loss.percent.toFixed(1)}%</TableCell>
+                        <TableCell><Badge variant="outline" className={loss.percent > Number(c.tolerance_percent_used ?? 2) ? 'text-destructive' : 'text-success'}>{loss.remaining === 0 ? 'Balanced' : loss.percent > Number(c.tolerance_percent_used ?? 2) ? 'Review' : 'Within tolerance'}</Badge></TableCell>
                         <TableCell className="text-sm">{profile?.full_name ?? '—'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {c.completed_at ? format(new Date(c.completed_at), 'M/d/yy') : '—'}

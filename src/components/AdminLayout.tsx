@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Package, FlaskConical, ArrowRightLeft,
-  AlertTriangle, BarChart3, Users, Settings, FileText, LogOut, Menu, Eye
+  AlertTriangle, BarChart3, Users, Settings, FileText, LogOut, Menu, Eye, Scale
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
@@ -12,6 +12,7 @@ const navLinks = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', end: true },
   { to: '/admin/inventory', icon: Package, label: 'Inventory' },
   { to: '/admin/castings', icon: FlaskConical, label: 'Castings' },
+  { to: '/admin/sweeps', icon: Scale, label: 'Sweeps' },
   { to: '/admin/warnings', icon: AlertTriangle, label: 'Warnings' },
   { to: '/admin/statistics', icon: BarChart3, label: 'Statistics' },
   { to: '/admin/settings', icon: Settings, label: 'Settings' },

@@ -18,6 +18,7 @@ import AdminWarnings from "./pages/AdminWarnings";
 import AdminStatistics from "./pages/AdminStatistics";
 import AdminUsers from "./pages/AdminUsers";
 import AdminLogs from "./pages/AdminLogs";
+import AdminSweeps from "./pages/AdminSweeps";
 import EmployeeHome from "./pages/employee/EmployeeHome";
 import EmployeeExtract from "./pages/employee/EmployeeExtract";
 import EmployeePending from "./pages/employee/EmployeePending";
@@ -49,6 +50,7 @@ const App = () => (
               <Route index element={<AdminDashboard />} />
               <Route path="inventory" element={<MetalInventory />} />
               <Route path="castings" element={<CastingRecords />} />
+              <Route path="sweeps" element={<AdminSweeps />} />
               <Route path="warnings" element={<AdminWarnings />} />
               <Route path="transactions" element={<TransactionLog />} />
               <Route path="statistics" element={<AdminStatistics />} />
