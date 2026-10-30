@@ -19,6 +19,8 @@ import { cn } from '@/lib/utils';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import { generateFlaskCode } from '@/lib/metalUtils';
 import { applyMetalStockDelta } from '@/lib/inventoryUtils';
+import { useSweepsCredits } from '@/hooks/useSweeps';
+import { reconcileSweeps } from '@/lib/sweepsUtils';
 
 const statusColor = (status: string) => {
   switch (status) {
@@ -41,6 +43,7 @@ const statusLabel = (status: string) => {
 export default function CastingRecords() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { credits: sweepsCredits } = useSweepsCredits();
   const [completeOpen, setCompleteOpen] = useState(false);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -507,6 +510,9 @@ export default function CastingRecords() {
                 <TableHead className="text-right">Disc. %</TableHead>
                 <TableHead className="text-right">Disc. G</TableHead>
                 <TableHead className="text-right">Casting Wt</TableHead>
+                <TableHead className="text-right">Sweeps (g)</TableHead>
+                <TableHead className="text-right">After Sweeps (g)</TableHead>
+                <TableHead className="text-right">After Sweeps %</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>By</TableHead>
                 <TableHead className="w-20"></TableHead>
@@ -518,6 +524,7 @@ export default function CastingRecords() {
                 const isCompleted = c.status === 'completed' || c.status === 'flagged';
                 const isPending = c.status === 'extracted_pending_completion' || c.status === 'open_with_sprue_transfer';
                 const sprueOut = Number(c.sprue_transferred_to_next_casting_grams ?? 0);
+                const sweepLoss = reconcileSweeps(c, sweepsCredits[c.id]);
                 return (
                   <TableRow key={c.id} className={cn(isPending && 'cursor-pointer hover:bg-muted/50')} onClick={() => {
                     if (isPending) { setSelectedCasting(c); setCompleteOpen(true); }
@@ -550,6 +557,9 @@ export default function CastingRecords() {
                     <TableCell className="text-right font-mono text-sm text-muted-foreground">
                       {isCompleted ? `${Number(c.extracted_grams).toFixed(2)}g` : '—'}
                     </TableCell>
+                    <TableCell className="text-right font-mono text-sm">{isCompleted ? sweepLoss.credited.toFixed(2) : '—'}</TableCell>
+                    <TableCell className={cn('text-right font-mono text-sm', isCompleted && sweepLoss.percent > Number(c.tolerance_percent_used ?? 2) ? 'text-destructive' : 'text-success')}>{isCompleted ? sweepLoss.remaining.toFixed(2) : '—'}</TableCell>
+                    <TableCell className="text-right font-mono text-sm">{isCompleted ? `${sweepLoss.percent.toFixed(1)}%` : '—'}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn('text-[10px]', statusColor(c.status))}>
                         {statusLabel(c.status)}
@@ -581,7 +591,7 @@ export default function CastingRecords() {
               })}
               {filteredCastings.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-muted-foreground py-8">No casting records</TableCell>
+                  <TableCell colSpan={16} className="text-center text-muted-foreground py-8">No casting records</TableCell>
                 </TableRow>
               )}
             </TableBody>
