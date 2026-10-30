@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793327106026,
+      "tag": "0000_casting_sweeps_receipts",
+      "breakpoints": true
+    }
+  ]
+}

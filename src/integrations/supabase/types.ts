@@ -363,6 +363,78 @@ export type Database = {
         }
         Relationships: []
       }
+      sweeps_allocations: {
+        Row: {
+          casting_id: string
+          grams: number
+          id: string
+          receipt_id: string
+        }
+        Insert: {
+          casting_id: string
+          grams: number
+          id?: string
+          receipt_id: string
+        }
+        Update: {
+          casting_id?: string
+          grams?: number
+          id?: string
+          receipt_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sweeps_allocations_casting_id_fkey"
+            columns: ["casting_id"]
+            isOneToOne: false
+            referencedRelation: "casting_records"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sweeps_allocations_receipt_id_fkey"
+            columns: ["receipt_id"]
+            isOneToOne: false
+            referencedRelation: "sweeps_receipts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sweeps_receipts: {
+        Row: {
+          created_at: string
+          grams: number
+          id: string
+          metal_family: string
+          notes: string | null
+          received_by_user_id: string
+          received_on: string
+          void_reason: string | null
+          voided_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          grams: number
+          id?: string
+          metal_family: string
+          notes?: string | null
+          received_by_user_id: string
+          received_on?: string
+          void_reason?: string | null
+          voided_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          grams?: number
+          id?: string
+          metal_family?: string
+          notes?: string | null
+          received_by_user_id?: string
+          received_on?: string
+          void_reason?: string | null
+          voided_at?: string | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -392,6 +464,20 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      record_sweeps_receipt: {
+        Args: {
+          p_casting_ids: string[]
+          p_family: string
+          p_grams: number
+          p_notes?: string
+          p_received_on: string
+        }
+        Returns: string
+      }
+      void_sweeps_receipt: {
+        Args: { p_reason: string; p_receipt_id: string }
+        Returns: undefined
       }
     }
     Enums: {
